@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">glamai</string>
+    <string name="title_activity_main">glamai</string>
+    <string name="package_name">com.glamai</string>
+    <string name="custom_url_scheme">com.glamai</string>
+</resources>
