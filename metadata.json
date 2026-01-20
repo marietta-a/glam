@@ -1,0 +1,7 @@
+{
+  "name": "GlamAI",
+  "description": "A sophisticated personal wardrobe manager and AI-powered outfit stylist that helps you organize your clothes and discover perfect combinations.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
