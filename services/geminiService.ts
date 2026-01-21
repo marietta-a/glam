@@ -248,77 +248,82 @@ export const suggestOutfit = async (
  * Protocol: Performs high-fidelity virtual try-on with strict identity and garment protocols.
  */
 export const visualizeOutfit = async (outfit: Outfit, profile: UserProfile | null): Promise<string> => {
-  return withRetry(async () => {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    
-    const itemsDescription = outfit.items.map(item => {
-      return `- ${item.name} (Category: ${item.category}, Colors: ${item.primaryColor}, Patterns: ${item.pattern || 'none'}, Textures: ${item.materialLook || 'standard'}, Fit: ${item.formality || 'tailored'}).`;
-    }).join('\n');
-    
-    const systemPrompt = `AI Stylist: Editorial Visualization
-Role: You are a high-fashion digital stylist and editorial photographer. Your task is to create Vogue-style simulation images where you perfectly dress a user avatar in specific wardrobe items for a given occasion, with pixel-perfect accuracy.
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  
+  const itemsDescription = outfit.items.map(item => {
+    return `- ${item.name} (Category: ${item.category}, Color: ${item.primaryColor}, Pattern: ${item.pattern || 'plain'}, Texture/Material: ${item.materialLook || 'standard'}, Details: ${item.description || 'standard silhouette'}).`;
+  }).join('\n');
+  
+  const promptText = `High-Fidelity Fashion Try-on Visualization. 
 
-CRITICAL RULES (MUST FOLLOW):
-1. AVATAR PRESERVATION: The person in the final image MUST BE IDENTICAL to the provided user avatar. Do NOT alter face shape, features, expression, hairstyle, color, skin tone, or body proportions. Treat the avatar as a 3D mannequin—only change the clothing.
-2. ITEM ACCURACY: Render each clothing/accessory item with exact fidelity:
-   - Colors: Match hex codes or described colors precisely: ${outfit.items.map(i => i.primaryColor).join(', ')}.
-   - Patterns: Replicate complex patterns EXACTLY as described. Do not invent new motifs.
-   - Texture: Render fabric textures accurately (silk drape, denim stiffness, wool weave).
-   - Silhouette/Cut: Maintain the described fit (tailored, oversized, fitted).
-3. VOGUE SIMULATION STYLE: Create an editorial photograph that embodies:
-   - Dramatic, cinematic lighting (studio strobes, chiaroscuro).
-   - High-fashion composition (dynamic angles, negative space).
-   - Contextual backdrop for "${outfit.occasion}" suggesting ambiance through a Vogue-style visual representation.
+STRICT ENSEMBLE FIDELITY RULES:
+The ensemble consists of a fixed collection of items chosen from the user's existing wardrobe. Each item within this ensemble MUST be rendered directly and exactly as it appears in its stored record.
 
-ITEMS TO RENDER:
+ENSEMBLE INVENTORY TO REPLICATE:
 ${itemsDescription}
 
-8k clarity. Realistic fabric physics. Professional editorial photoshoot.`;
+STRICT RENDERING CONSTRAINTS:
+1. Pattern: Reproduce all patterns (floral, plaid, striped, abstract) WITHOUT any artistic modification or substitution.
+2. Design: Maintain the EXACT cut, silhouette, stylistic details, embellishments (buttons, zippers, ruffles, collars), and overall design of the garment as recorded.
+3. Color: Utilize the PRECISE shade and color tone extracted from the original item.
+4. Texture: Visually represent the fabric's texture (e.g., denim, silk, wool, leather, knit, sequined) with high fidelity.
+5. Logos/Branding: If any branding or logos are present on the item within the ensemble, they MUST be faithfully reproduced.
 
-    const imageParts: any[] = [];
-    
-    if (profile?.avatar_url) {
+AVATAR & PERSONA FIDELITY:
+- Face: You MUST preserve the user's face exactly as shown in the reference avatar. Do not redesign the facial structure or identity.
+- Makeup: Professional makeup that suits the outfit is permitted and encouraged to enhance the editorial look.
+
+IMPROVISATION LIMITS:
+Strictly limit improvisation to Missing Essential Item Categories only (e.g., if the ensemble lacks shoes, generate stylistically appropriate footwear). Under no circumstances should any item that is already part of the ensemble be redesigned, recolored, or altered.
+
+SCENE & COMPOSITION:
+- Render a professional full-body fashion editorial image featuring the user in a high-end, stylistically appropriate environment reflecting the "${outfit.occasion}" setting.
+- Environment Examples: Luxury office for 'Work', grand ballroom for 'Formal', sunset coastal resort for 'Beach & Vacation', or chic cafe for 'Weekend Brunch'.
+- Lighting: Professional studio-grade lighting.
+
+STRICT SAFETY: Maintain high-end boutique standards. Ensure the presentation is classy and non-provocative. No nudity or adult themes.`;
+
+  const contents: any = { parts: [{ text: promptText }] };
+  
+  if (profile?.avatar_url) {
+    try {
       const avatarBase64 = await getBase64Data(profile.avatar_url);
-      const resizedAvatar = await resizeImageForAI(avatarBase64, 1024);
-      imageParts.push({ inlineData: { data: resizedAvatar, mimeType: 'image/jpeg' } });
+      contents.parts.unshift({
+        inlineData: {
+          data: avatarBase64,
+          mimeType: 'image/jpeg'
+        }
+      });
+    } catch (e) {
+      console.warn("Could not load user persona for visualization:", e);
     }
+  }
 
-    // Limit to top 3 items to avoid RPC/Payload issues while providing enough context
-    const visualizationItems = outfit.items.slice(0, 3);
-    for (const item of visualizationItems) {
-      try {
-        const itemBase64 = await getBase64Data(item.imageUrl);
-        const resizedItem = await resizeImageForAI(itemBase64, 1024);
-        imageParts.push({ inlineData: { data: resizedItem, mimeType: 'image/jpeg' } });
-      } catch (e) {
-        console.warn(`Skipping item image ${item.name}:`, e);
+  const response = await ai.models.generateContent({
+    model: 'gemini-2.5-flash-image',
+    contents,
+    config: {
+      imageConfig: {
+        aspectRatio: "3:4"
       }
     }
+  });
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash-image',
-      contents: [{
-        parts: [
-          ...imageParts,
-          { text: systemPrompt }
-        ]
-      }],
-      config: { imageConfig: { aspectRatio: "3:4" } }
-    });
-
-    let imageUrl = '';
-    const parts = response.candidates?.[0]?.content?.parts || [];
-    for (const part of parts) {
+  let imageUrl = '';
+  const candidates = response.candidates;
+  if (candidates && candidates.length > 0) {
+    for (const part of candidates[0].content.parts) {
       if (part.inlineData) {
         imageUrl = `data:image/png;base64,${part.inlineData.data}`;
         break;
       }
     }
+  }
 
-    if (!imageUrl) throw new Error("Failed to visualize editorial ensemble");
-    return imageUrl;
-  });
+  if (!imageUrl) throw new Error("Failed to visualize outfit ensemble");
+  return imageUrl;
 };
+
 
 export type RestorationMode = 'portrait' | 'repair' | 'upscale';
 
