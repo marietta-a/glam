@@ -68,6 +68,8 @@ export interface UserProfile {
   created_at: string;
   updated_at: string;
   is_premium: boolean;
+  credits: number;
+  total_generations: number;
   trial_started_at: string | null;
   language: string;
 }
