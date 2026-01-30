@@ -49,7 +49,6 @@ const Auth: React.FC<AuthProps> = ({ onProfileImageUpdate, profileImage }) => {
 
     try {
       if (authMode === 'login') {
-        // Cast auth to any to handle type mismatch for signInWithPassword
         const { error: loginErr } = await (supabase.auth as any).signInWithPassword({ email, password });
         if (loginErr) {
           if (loginErr.message.toLowerCase().includes('invalid')) {
@@ -59,7 +58,6 @@ const Auth: React.FC<AuthProps> = ({ onProfileImageUpdate, profileImage }) => {
           throw loginErr;
         }
       } else if (authMode === 'signup') {
-        // Cast auth to any to handle type mismatch for signUp
         const { error: signupErr } = await (supabase.auth as any).signUp({ 
           email, 
           password
@@ -73,7 +71,6 @@ const Auth: React.FC<AuthProps> = ({ onProfileImageUpdate, profileImage }) => {
         }
         setShowVerificationNotice(true);
       } else if (authMode === 'forgotPassword') {
-        // Cast auth to any to handle type mismatch for resetPasswordForEmail
         const { error: resetErr } = await (supabase.auth as any).resetPasswordForEmail(email, {
           redirectTo: window.location.origin,
         });
@@ -99,24 +96,6 @@ const Auth: React.FC<AuthProps> = ({ onProfileImageUpdate, profileImage }) => {
     setIsVerifiedSuccess(false);
     setShowForgotPrompt(false);
     setAuthMode(mode);
-  };
-
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setLoading(true);
-      try {
-        const reader = new FileReader();
-        reader.onloadend = async () => {
-          const base64 = reader.result as string;
-          const compressed = await compressImage(base64, 600, 0.6);
-          onProfileImageUpdate(compressed);
-        };
-        reader.readAsDataURL(file);
-      } finally {
-        setLoading(false);
-      }
-    }
   };
 
   const renderContent = () => {
@@ -167,11 +146,21 @@ const Auth: React.FC<AuthProps> = ({ onProfileImageUpdate, profileImage }) => {
 
     return (
       <>
-        <div className="mb-8 scale-110">
-          <BrandLogo size="lg" />
+        <div className="mb-6 flex flex-col items-center">
+          {profileImage ? (
+            <div className="w-24 h-24 rounded-full border-[6px] border-white shadow-2xl overflow-hidden mb-6 animate-in zoom-in duration-1000">
+              <img src={profileImage} alt="Profile" className="w-full h-full object-cover" />
+            </div>
+          ) : (
+            <div className="mb-8 scale-110">
+              <BrandLogo size="lg" />
+            </div>
+          )}
         </div>
+        
         <h2 className="text-2xl font-black text-gray-900 tracking-tight text-center mb-2 uppercase">{title}</h2>
         <p className="text-gray-400 text-sm text-center mb-10 px-6 leading-relaxed">{subtitle}</p>
+        
         <form onSubmit={handleAuth} className="w-full space-y-4">
           <div className="relative group">
             <Mail className="absolute left-6 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-300 group-focus-within:text-[#26A69A] transition-colors z-10" />
@@ -243,15 +232,6 @@ const Auth: React.FC<AuthProps> = ({ onProfileImageUpdate, profileImage }) => {
           >
             {authMode === 'login' ? "Need an account?" : "Already member?"}
           </button>
-          
-          {authMode === 'login' && !showForgotPrompt && (
-            <button 
-              onClick={() => handleToggleMode('forgotPassword')} 
-              className="text-[10px] font-bold text-gray-300 hover:text-[#26A69A] transition-colors tracking-widest uppercase"
-            >
-              Trouble signing in?
-            </button>
-          )}
         </div>
       </>
     );
@@ -259,7 +239,6 @@ const Auth: React.FC<AuthProps> = ({ onProfileImageUpdate, profileImage }) => {
 
   return (
     <div className="min-h-screen w-full relative flex flex-col items-center justify-center p-6 bg-[#f7f9fa] overflow-hidden">
-      {/* Background Editorial Image */}
       <div className="absolute inset-0 z-0">
         <img 
           src="https://images.unsplash.com/photo-1490481651871-ab68de25d43d?q=80&w=2000&auto=format&fit=crop" 
