@@ -1,3 +1,4 @@
+
 import { supabase } from '../lib/supabase';
 import { WardrobeItem, UserProfile, CachedOutfit, Outfit, Occasion } from '../types';
 
@@ -111,7 +112,7 @@ export const updateUserProfile = async (profile: Partial<UserProfile>): Promise<
 export const createUserProfile = async (profile: Partial<UserProfile>): Promise<void> => {
   const { error } = await supabase
     .from('user_profile')
-    .insert([profile]);
+    .insert([{ ...profile, credits: 0, total_generations: 0 }]);
 
   if (error) throw error;
 };
@@ -158,18 +159,18 @@ export const saveWardrobeItem = async (item: Partial<WardrobeItem>): Promise<War
     name: item.name,
     category: item.category,
     sub_category: item.subCategory,
+    // Use camelCase property primaryColor instead of primary_color
     primary_color: item.primaryColor,
+    // Use camelCase property secondaryColors instead of secondary_colors
     secondary_colors: item.secondaryColors,
     pattern: item.pattern,
-    // Using materialLook from item (Partial<WardrobeItem>) instead of material_look
     material_look: item.materialLook,
     seasonality: item.seasonality,
     formality: item.formality,
-    // Using warmthLevel from item instead of warmth_level
     warmth_level: item.warmthLevel,
-    // Using fitsWithColors from item instead of fits_with_colors
+    // Fix: Use camelCase fitsWithColors
     fits_with_colors: item.fitsWithColors,
-    // Using occasionSuitability from item instead of occasion_suitability
+    // Fix: Use camelCase occasionSuitability
     occasion_suitability: item.occasionSuitability,
     tags: item.tags,
     image_url: item.imageUrl,
@@ -200,18 +201,18 @@ export const updateWardrobeItem = async (item: WardrobeItem): Promise<void> => {
       name: item.name,
       category: item.category,
       sub_category: item.subCategory,
+      // Use camelCase property primaryColor instead of primary_color
       primary_color: item.primaryColor,
+      // Use camelCase property secondaryColors instead of secondary_colors
       secondary_colors: item.secondaryColors,
       pattern: item.pattern,
-      // Using materialLook from item (WardrobeItem) instead of material_look
       material_look: item.materialLook,
       seasonality: item.seasonality,
       formality: item.formality,
-      // Using warmthLevel from item instead of warmth_level
       warmth_level: item.warmthLevel,
-      // Using fitsWithColors from item instead of fits_with_colors
+      // Fix: Use camelCase fitsWithColors
       fits_with_colors: item.fitsWithColors,
-      // Using occasionSuitability from item instead of occasion_suitability
+      // Fix: Use camelCase occasionSuitability
       occasion_suitability: item.occasionSuitability,
       tags: item.tags,
       description: item.description,
@@ -268,7 +269,7 @@ export const fetchOutfitCache = async (userId: string, wardrobeItems: WardrobeIt
         },
         visualizedImage: row.visualized_image_url,
         generatedAt: new Date(row.generated_at).getTime(),
-        combinationHistory: row.history || [], // Map database 'history' column to combinationHistory
+        combinationHistory: row.history || [], 
         pastOutfits: [],
         pastImages: [],
         isRecycled: false
@@ -299,16 +300,65 @@ export const saveOutfitToCache = async (userId: string, occasion: string, cached
       outfit_id: outfit.id,
       outfit_name: outfit.name,
       wardrobe_item_ids: wardrobeItemIds,
-      // Property access is 'stylistNotes' (camelCase) to match Outfit interface
+      // Fixed: changed 'row.stylist_notes' to 'outfit.stylistNotes'
       stylist_notes: outfit.stylistNotes,
       occasion: occasion,
       visualized_image_url: signedUrl,
       generated_at: new Date(generatedAt).toISOString(),
       expires_at: new Date(generatedAt + 24 * 60 * 60 * 1000).toISOString(),
-      history: combinationHistory || [] // Persist combinationHistory to 'history' column
+      history: combinationHistory || [] 
     }]);
 
   if (error) throw error;
+};
+
+export const useGenerationCredit = async (profile: UserProfile): Promise<UserProfile> => {
+  const newTotal = (profile.total_generations || 0) + 1;
+  let newCredits = profile.credits || 0;
+  
+  // Trial logic: first 15 are "free" (credits not deducted if below limit)
+  if (newTotal > 15) {
+    if (newCredits <= 0) throw new Error("OUT_OF_CREDITS");
+    newCredits -= 1;
+  }
+
+  const updated = { 
+    ...profile, 
+    credits: newCredits, 
+    total_generations: newTotal,
+    updated_at: new Date().toISOString()
+  };
+
+  const { error } = await supabase
+    .from('user_profile')
+    .update({ 
+      credits: updated.credits, 
+      total_generations: updated.total_generations, 
+      updated_at: updated.updated_at 
+    })
+    .eq('id', profile.id);
+
+  if (error) throw error;
+  return updated;
+};
+
+export const addCredits = async (profile: UserProfile, amount: number): Promise<UserProfile> => {
+  const updated = { 
+    ...profile, 
+    credits: (profile.credits || 0) + amount,
+    updated_at: new Date().toISOString()
+  };
+
+  const { error } = await supabase
+    .from('user_profile')
+    .update({ 
+      credits: updated.credits, 
+      updated_at: updated.updated_at 
+    })
+    .eq('id', profile.id);
+
+  if (error) throw error;
+  return updated;
 };
 
 export const deleteOutfitFromCache = async (userId: string, occasion: string): Promise<void> => {
@@ -337,7 +387,6 @@ export const deleteAllUserData = async (userId: string): Promise<void> => {
     items.forEach(item => paths.push(`${userId}/${item.item_id}.jpg`));
   }
   
-  // Fix: Consolidating 'Beach' and 'Vacation' to match the Occasion type definition 'Beach & Vacation'
   const occasions: Occasion[] = ['Casual', 'Work', 'Date Night', 'Formal', 'Gym', 'Party', 'Wedding Guest', 'Weekend Brunch', 'Beach & Vacation', 'Concert & Festival', 'Job Interview', 'Business Trip', 'Lounge & Home'];
   occasions.forEach(occ => paths.push(`${userId}/${occ}.jpg`));
     
