@@ -1,5 +1,6 @@
+
 import React, { useState, useRef, useEffect } from 'react';
-import { User, Menu, Globe, ChevronDown } from 'lucide-react';
+import { User, Menu, Globe, ChevronDown, Zap, Crown } from 'lucide-react';
 import { LANGUAGES, LanguageCode } from '../services/i18n';
 import BrandLogo from './BrandLogo';
 
@@ -10,6 +11,8 @@ interface HeaderProps {
   profileImage: string | null;
   currentLang: string;
   onLanguageChange: (lang: string) => void;
+  credits?: number;
+  isPremium?: boolean;
 }
 
 const FLAG_MAP: Record<string, string> = {
@@ -25,7 +28,9 @@ const Header: React.FC<HeaderProps> = ({
   title, 
   profileImage, 
   currentLang, 
-  onLanguageChange 
+  onLanguageChange,
+  credits = 0,
+  isPremium = false
 }) => {
   const [isLangOpen, setIsLangOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -50,21 +55,36 @@ const Header: React.FC<HeaderProps> = ({
         >
           <Menu className="w-6 h-6" />
         </button>
-        <BrandLogo size="sm" className="hidden sm:flex" />
+        <div className="hidden sm:flex items-center space-x-3 ml-2">
+           <div className="flex items-center space-x-1 px-3 py-1 bg-[#26A69A]/5 border border-[#26A69A]/10 rounded-full">
+              {isPremium ? (
+                <>
+                  <Crown className="w-3 h-3 text-amber-500" />
+                  <span className="text-[10px] font-black text-amber-600 uppercase tracking-widest">Elite</span>
+                </>
+              ) : (
+                <>
+                  <Zap className="w-3 h-3 text-[#26A69A]" />
+                  <span className="text-[10px] font-black text-[#26A69A] uppercase tracking-widest">{credits}</span>
+                </>
+              )}
+           </div>
+        </div>
       </div>
       
       <div className="flex flex-col items-center">
-        <h1 className="text-base font-black text-gray-900 tracking-widest uppercase">
+        <h1 className="text-base font-black text-gray-900 tracking-widest uppercase truncate max-w-[120px] sm:max-w-none">
           {title}
         </h1>
         <div className="flex items-center space-x-1">
-          <div className="w-1 h-1 bg-[#26A69A] rounded-full animate-pulse" />
-          <span className="text-[7px] font-black text-[#26A69A] uppercase tracking-[3px]">Digital Boutique</span>
+          <div className={`w-1 h-1 rounded-full animate-pulse ${isPremium ? 'bg-amber-500' : 'bg-[#26A69A]'}`} />
+          <span className={`text-[7px] font-black uppercase tracking-[3px] ${isPremium ? 'text-amber-600' : 'text-[#26A69A]'}`}>
+            {isPremium ? 'Elite Member' : 'Digital Boutique'}
+          </span>
         </div>
       </div>
       
       <div className="flex items-center space-x-1">
-        {/* Language Selector */}
         <div className="relative" ref={dropdownRef}>
           <button 
             onClick={() => setIsLangOpen(!isLangOpen)}
@@ -102,13 +122,12 @@ const Header: React.FC<HeaderProps> = ({
           )}
         </div>
 
-        {/* Profile avatar */}
         <button 
           onClick={onProfileClick}
           className="relative group focus:outline-none ml-1"
           title="Profile"
         >
-          <div className="w-9 h-9 rounded-full border-2 border-teal-50 bg-gray-50 flex items-center justify-center overflow-hidden transition-all group-hover:border-[#26A69A]/30">
+          <div className={`w-9 h-9 rounded-full border-2 bg-gray-50 flex items-center justify-center overflow-hidden transition-all group-hover:border-[#26A69A]/30 ${isPremium ? 'border-amber-100' : 'border-teal-50'}`}>
             {profileImage ? (
               <img src={profileImage} alt="Profile" className="w-full h-full object-cover" />
             ) : (
@@ -116,7 +135,7 @@ const Header: React.FC<HeaderProps> = ({
             )}
           </div>
           <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-white border border-gray-100 rounded-full flex items-center justify-center">
-            <div className="w-1.5 h-1.5 bg-[#26A69A] rounded-full" />
+            <div className={`w-1.5 h-1.5 rounded-full ${isPremium ? 'bg-amber-500' : 'bg-[#26A69A]'}`} />
           </div>
         </button>
       </div>

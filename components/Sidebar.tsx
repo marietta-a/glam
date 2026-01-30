@@ -1,5 +1,6 @@
+
 import React from 'react';
-import { X, Settings as SettingsIcon, ShieldCheck, Shirt, ChevronRight, Crown, Sparkles, BookOpen, LogOut } from 'lucide-react';
+import { X, Settings as SettingsIcon, ShieldCheck, Shirt, ChevronRight, Crown, Sparkles, BookOpen, LogOut, Zap } from 'lucide-react';
 import { t } from '../services/i18n';
 
 interface SidebarProps {
@@ -13,6 +14,7 @@ interface SidebarProps {
   isPremium?: boolean;
   onUpgrade?: () => void;
   lang?: string;
+  credits?: number;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ 
@@ -25,7 +27,8 @@ const Sidebar: React.FC<SidebarProps> = ({
   username,
   isPremium = false,
   onUpgrade,
-  lang = 'en'
+  lang = 'en',
+  credits = 0
 }) => {
   return (
     <>
@@ -61,6 +64,13 @@ const Sidebar: React.FC<SidebarProps> = ({
                 {username || email}
               </p>
               {username && <p className="text-[10px] text-gray-400 truncate">{email}</p>}
+              
+              <div className="pt-4">
+                 <div className="inline-flex items-center space-x-2 px-3 py-1.5 bg-gray-50 rounded-xl">
+                    <Zap className="w-3 h-3 text-[#26A69A]" />
+                    <span className="text-[10px] font-black text-[#26A69A] uppercase tracking-widest">{credits} {t('credits_remaining', lang)}</span>
+                 </div>
+              </div>
             </div>
           </div>
 
@@ -76,8 +86,8 @@ const Sidebar: React.FC<SidebarProps> = ({
                 <div className="flex items-center space-x-4">
                   <Crown className="w-5 h-5 text-amber-400" />
                   <div className="text-left">
-                    <p className="text-xs font-black uppercase tracking-widest">{t('go_pro', lang)}</p>
-                    <p className="text-[9px] text-white/50 font-bold">Unlock AI Mirror</p>
+                    <p className="text-xs font-black uppercase tracking-widest">{t('purchase_credits', lang)}</p>
+                    <p className="text-[9px] text-white/50 font-bold">Via Google Play</p>
                   </div>
                 </div>
                 <ChevronRight className="w-4 h-4 opacity-30 group-hover:translate-x-1 transition-all" />
@@ -141,7 +151,7 @@ const Sidebar: React.FC<SidebarProps> = ({
 
           <div className="p-8 mt-auto border-t border-gray-50">
             <p className="text-center text-[9px] font-bold text-gray-300 uppercase tracking-[2px]">
-              GlamWardrobe v1.1.0 (PRO)
+              GlamWardrobe v1.2.0 (Elite)
             </p>
           </div>
         </div>
