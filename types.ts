@@ -1,4 +1,5 @@
-export type Category = 'All Items' | 'Tops' | 'Bottoms' | 'Outerwear' | 'Shoes' | 'Dresses' | 'Accessories';
+
+export type Category = 'All Items' | 'Tops' | 'Bottoms' | 'Outerwear' | 'Shoes' | 'Dresses' | 'Accessories' | 'Bags';
 
 export type Occasion = 
   | 'Casual' 
@@ -9,16 +10,25 @@ export type Occasion =
   | 'Party' 
   | 'Wedding Guest' 
   | 'Weekend Brunch' 
-  | 'Beach & Vacation' 
+  | 'Beach & Vacation'
   | 'Concert & Festival' 
   | 'Job Interview' 
   | 'Business Trip' 
   | 'Lounge & Home';
 
+export const ORDERED_OCCASIONS: Occasion[] = [
+  'Casual', 'Work', 'Date Night', 'Formal', 'Weekend Brunch', 
+  'Beach & Vacation', 'Wedding Guest', 'Gym', 'Party', 
+  'Concert & Festival', 'Job Interview', 'Business Trip', 'Lounge & Home'
+];
+
+export type EditorialStyle = 'Vogue' | 'Harper\'s' | 'Minimalist' | 'Avant-Garde' | 'Cyber-Glam' | 'Street-Chic';
+
 export interface WardrobeItem {
   id: string; 
   userId: string;
   name: string;
+  archivalId?: string;
   category: Category;
   subCategory?: string;
   primaryColor?: string;
@@ -68,6 +78,8 @@ export interface Outfit {
   items: WardrobeItem[];
   stylistNotes: string;
   occasion?: Occasion;
+  noMoreCombinations?: boolean;
+  isUniversal?: boolean;
 }
 
 export interface CachedOutfit {
@@ -75,6 +87,11 @@ export interface CachedOutfit {
   visualizedImage: string | null;
   generatedAt: number;
   history?: string[]; 
+  combinationHistory?: string[]; // Sorted comma-separated item IDs to prevent repeats
+  pastOutfits?: Outfit[];
+  pastImages?: string[];
+  isRecycled?: boolean;
+  isExhausted?: boolean;
 }
 
 export interface UploadTask {

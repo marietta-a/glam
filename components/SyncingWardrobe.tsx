@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { UploadTask } from '../types';
-import { CloudSync, Wand2, Sparkles, Shirt } from 'lucide-react';
+import { CloudSync, Wand2, Sparkles, Shirt, AlertTriangle, Download, Info } from 'lucide-react';
 import { t } from '../services/i18n';
 
 interface SyncingWardrobeProps {
@@ -23,102 +23,117 @@ const SyncingWardrobe: React.FC<SyncingWardrobeProps> = ({ tasks, lang = 'en' })
 
   if (!activeTask) return null;
 
+  const itemProgressText = activeTask.totalItemsInBatch 
+    ? `Item ${activeTask.processedItemsInBatch || 0} of ${activeTask.totalItemsInBatch}`
+    : 'Initializing...';
+
+  const isError = activeTask.status === 'error';
+
   return (
-    <div className="flex-1 flex flex-col items-center justify-center p-8 animate-in fade-in duration-1000 relative">
+    <div className="w-full flex flex-col items-center justify-center p-8 bg-white rounded-[48px] shadow-2xl border border-teal-50/50 animate-in fade-in slide-in-from-top-4 duration-1000 relative overflow-hidden">
+      {/* Visual Priority: Active Processing Header */}
+      <div className="absolute top-0 left-0 right-0 py-3 bg-zinc-900 flex items-center justify-center space-x-3 z-30">
+        <div className="w-1.5 h-1.5 bg-[#26A69A] rounded-full animate-pulse" />
+        <span className="text-[8px] font-black text-white uppercase tracking-[3px]">Active Archival Session</span>
+        {tasks.length > 1 && (
+          <span className="text-[8px] font-black text-[#26A69A] uppercase tracking-[2px] border-l border-white/10 pl-3">
+            Queue: {tasks.length} Batches
+          </span>
+        )}
+      </div>
+
       {/* Editorial Decorative Stage */}
-      <div className="relative w-full max-w-[320px] mb-12">
-        <div className="aspect-[3/4] rounded-[56px] overflow-hidden bg-white shadow-2xl relative border-4 border-white transform -rotate-1 z-20">
+      <div className="relative w-full max-w-[240px] mb-10 mt-6">
+        <div className={`aspect-[3/4] rounded-[48px] overflow-hidden bg-white shadow-xl relative border-4 border-white transform -rotate-1 z-20 transition-all duration-500 ${isError ? 'border-red-50 shadow-red-100' : ''}`}>
           {tasks.map((task, idx) => (
             <div 
               key={task.id}
               className={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${idx === activeIndex ? 'opacity-100' : 'opacity-0'}`}
             >
-              {task.previewUrl ? (
+              {task.previewUrl && task.status !== 'error' ? (
                 <img 
                   src={task.previewUrl} 
                   alt="Processing piece" 
                   className="w-full h-full object-cover" 
                 />
               ) : (
-                <div className="w-full h-full bg-gray-50 flex items-center justify-center">
-                  <Shirt className="w-12 h-12 text-gray-200 animate-pulse" />
+                <div className={`w-full h-full flex flex-col items-center justify-center ${isError ? 'bg-red-50/30' : 'bg-gray-50'}`}>
+                  {task.status === 'error' ? (
+                    <div className="flex flex-col items-center justify-center p-8 text-center space-y-4">
+                      <AlertTriangle className="w-10 h-10 text-red-400 animate-in zoom-in duration-300" />
+                      <Download className="w-5 h-5 text-red-200 animate-bounce" />
+                    </div>
+                  ) : (
+                    <Shirt className="w-10 h-10 text-gray-200 animate-pulse" />
+                  )}
                 </div>
               )}
             </div>
           ))}
           
-          {/* Scanning Overlay Effect */}
-          <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[#26A69A]/10 to-[#26A69A]/5 z-10" />
-          <div className="absolute inset-0 overflow-hidden pointer-events-none z-20">
-             <div className="w-full h-24 bg-gradient-to-b from-transparent via-[#26A69A]/20 to-transparent absolute top-0 animate-scan-beam" />
-          </div>
+          {/* Enhanced Scanning Overlay Effect */}
+          {!isError && (
+            <>
+              <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[#26A69A]/5 to-[#26A69A]/10 z-10" />
+              <div className="absolute inset-0 overflow-hidden pointer-events-none z-20">
+                 <div className="w-full h-32 bg-gradient-to-b from-transparent via-[#26A69A]/40 to-transparent absolute top-0 animate-scan-beam" />
+              </div>
+            </>
+          )}
         </div>
 
         {/* Backdrop Stacks */}
-        <div className="absolute top-6 left-6 right-[-20px] bottom-[-20px] bg-[#26A69A]/10 rounded-[56px] z-10 transform rotate-3 blur-md" />
-        <div className="absolute -top-4 -right-4 z-30 bg-white p-5 rounded-[28px] shadow-xl border border-gray-100 flex items-center justify-center">
-           <Wand2 className="w-6 h-6 text-[#26A69A] animate-pulse" />
-        </div>
+        <div className={`absolute top-4 left-4 right-[-10px] bottom-[-10px] rounded-[48px] z-10 transform rotate-3 blur-sm transition-colors duration-500 ${isError ? 'bg-red-500/5' : 'bg-[#26A69A]/5'}`} />
       </div>
 
       {/* Progress & Content */}
       <div className="text-center w-full max-w-[280px] space-y-6 relative z-30">
         <div>
-          <h2 className="text-2xl font-black text-gray-900 tracking-tight uppercase leading-tight mb-2">
-            Cataloging <br />
-            <span className="text-[#26A69A]">Your Pieces</span>
+          <h2 className={`text-xl font-black tracking-tight uppercase leading-tight mb-2 transition-colors duration-500 ${isError ? 'text-red-500' : 'text-gray-900'}`}>
+            {isError ? 'Archival \n Failure' : <>Cataloging <br /> <span className="text-[#26A69A]">New Arrivals</span></>}
           </h2>
-          <div className="h-6">
-            <p className="text-[10px] text-gray-400 font-black uppercase tracking-[3px] animate-in slide-in-from-bottom-2">
-              {activeTask.status === 'analyzing' && 'Authenticating Silhouette...'}
-              {activeTask.status === 'illustrating' && 'Digitizing Textures...'}
-              {activeTask.status === 'saving' && 'Syncing Cloud Storage...'}
+          <div className="min-h-12 flex flex-col justify-center px-4">
+            <p className={`text-[9px] font-black uppercase tracking-[1.5px] leading-relaxed animate-in slide-in-from-bottom-2 duration-500 ${isError ? 'text-red-600' : 'text-gray-400'}`}>
+              {activeTask.status === 'analyzing' && 'Authenticating Silhouette Logic...'}
+              {activeTask.status === 'illustrating' && 'Digitizing High-Fidelity Textures...'}
+              {activeTask.status === 'saving' && 'Syncing Digital Boutique...'}
               {activeTask.status === 'complete' && 'Boutique Record Ready'}
-              {activeTask.status === 'error' && 'Sync Interrupted'}
+              {activeTask.status === 'error' && (activeTask.errorMessage || 'Archive sync protocol error')}
             </p>
           </div>
         </div>
 
-        {/* High-End Style Progress Bar */}
-        <div className="space-y-3">
-           <div className="flex items-center justify-between px-2 text-[9px] font-black uppercase tracking-widest text-[#26A69A]">
-              <span>Syncing Archive</span>
+        {/* Progress Bar */}
+        <div className={`space-y-3 transition-opacity duration-300 ${isError ? 'opacity-30' : 'opacity-100'}`}>
+           <div className="flex items-center justify-between px-2 text-[8px] font-black uppercase tracking-[2px] text-[#26A69A]">
+              <span>{itemProgressText}</span>
               <span>{Math.round(activeTask.progress)}%</span>
            </div>
-           <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden shadow-inner p-0.5">
+           <div className="w-full h-1.5 bg-gray-50 rounded-full overflow-hidden shadow-inner">
              <div 
-               className="h-full bg-gradient-to-r from-[#26A69A]/80 to-[#26A69A] rounded-full transition-all duration-700 ease-out shadow-[0_0_8px_rgba(38,166,154,0.4)]"
+               className="h-full bg-[#26A69A] rounded-full transition-all duration-700 ease-out shadow-[0_0_8px_rgba(38,166,154,0.3)]"
                style={{ width: `${Math.max(activeTask.progress, 5)}%` }}
              />
            </div>
         </div>
-
-        {tasks.length > 1 && (
-          <div className="flex justify-center space-x-1.5 pt-2">
-            {tasks.map((_, i) => (
-              <div 
-                key={i} 
-                className={`h-1 rounded-full transition-all duration-500 ${i === activeIndex ? 'w-6 bg-[#26A69A]' : 'w-1 bg-gray-200'}`} 
-              />
-            ))}
-          </div>
-        )}
       </div>
 
-      <div className="mt-12 flex items-center space-x-3 text-[9px] font-black text-gray-300 uppercase tracking-widest animate-pulse">
-        <Sparkles className="w-3 h-3" />
-        <span>Artificial Intelligence at Work</span>
-      </div>
+      {!isError && (
+        <div className="mt-8 flex items-center space-x-3 text-[8px] font-black text-gray-300 uppercase tracking-widest animate-pulse">
+          <Wand2 className="w-3 h-3" />
+          <span>Throttled AI Engine Active</span>
+        </div>
+      )}
 
       <style>{`
         @keyframes scan-beam {
-          0% { transform: translateY(-100%); opacity: 0; }
-          20% { opacity: 1; }
-          80% { opacity: 1; }
-          100% { transform: translateY(400%); opacity: 0; }
+          0% { transform: translateY(-120%); opacity: 0; }
+          30% { opacity: 1; }
+          70% { opacity: 1; }
+          100% { transform: translateY(450%); opacity: 0; }
         }
         .animate-scan-beam {
-          animation: scan-beam 3s ease-in-out infinite;
+          animation: scan-beam 4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
         }
       `}</style>
     </div>

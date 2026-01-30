@@ -21,14 +21,20 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, onClick }) => {
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
         />
         {item.isFavorite && (
-          <div className="absolute top-3 right-3 p-1.5 bg-white/90 backdrop-blur-sm text-red-500 rounded-xl shadow-sm">
+          <div className="absolute top-3 right-3 p-1.5 bg-white/90 backdrop-blur-sm text-red-500 rounded-xl shadow-sm z-10">
             <Heart className="w-3.5 h-3.5 fill-current" />
           </div>
         )}
+        {/* Archival ID Overlay */}
+        <div className="absolute bottom-2 left-2 px-2 py-0.5 bg-black/40 backdrop-blur-md rounded-lg z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+          <p className="text-[7px] font-black text-white uppercase tracking-widest">{item.archivalId}</p>
+        </div>
       </div>
-      <div className="mt-4 px-1">
-        <p className="text-xs font-bold text-gray-800 truncate tracking-tight">{item.name}</p>
-        <p className="text-[9px] text-gray-400 uppercase tracking-[1.5px] mt-1 font-bold">{item.category}</p>
+      <div className="mt-4 px-1 flex justify-between items-start">
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-bold text-gray-800 truncate tracking-tight">{item.name}</p>
+          <p className="text-[9px] text-gray-400 uppercase tracking-[1.5px] mt-1 font-bold">{item.category}</p>
+        </div>
       </div>
     </div>
   );
