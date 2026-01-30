@@ -1,4 +1,3 @@
-
 import { supabase } from '../lib/supabase';
 import { WardrobeItem, UserProfile, CachedOutfit, Outfit, Occasion } from '../types';
 
@@ -87,10 +86,20 @@ export const fetchUserProfile = async (userId: string): Promise<UserProfile | nu
     console.error("Fetch profile error:", error);
     return null;
   }
+  
+  // Persist avatar locally for personalization
+  if (data?.avatar_url) {
+    localStorage.setItem('glam_last_avatar', data.avatar_url);
+  }
+  
   return data;
 };
 
 export const updateUserProfile = async (profile: Partial<UserProfile>): Promise<void> => {
+  if (profile.avatar_url) {
+    localStorage.setItem('glam_last_avatar', profile.avatar_url);
+  }
+
   const { error } = await supabase
     .from('user_profile')
     .update({ ...profile, updated_at: new Date().toISOString() })
@@ -108,20 +117,18 @@ export const createUserProfile = async (profile: Partial<UserProfile>): Promise<
 };
 
 export const logoutUser = async (): Promise<void> => {
-  localStorage.removeItem('glam_profile_image');
   localStorage.removeItem('glam_outfits_cache');
   localStorage.removeItem('glam_active_view');
   localStorage.removeItem('glam_active_tab');
-  // Cast auth to any to handle library type inconsistency
   const { error } = await (supabase.auth as any).signOut();
   if (error) throw error;
 };
+
 
 export const uploadWardrobeImage = async (userId: string, itemId: string, base64Image: string): Promise<string> => {
   const compressedBase64 = await compressImage(base64Image);
   const base64Content = compressedBase64.split(';base64,').pop()!;
   
-  // FIX: Refactor fetch logic to avoid 'unknown' type errors for res.blob()
   const response = await fetch(`data:image/jpeg;base64,${base64Content}`);
   const blob = (await response.blob()) as unknown as Blob;
   const filePath = `${userId}/${itemId}.jpg`;
@@ -137,12 +144,15 @@ export const uploadWardrobeImage = async (userId: string, itemId: string, base64
     .createSignedUrl(filePath, 31536000); 
 
   if(error) throw error;
+  
+  if (itemId === 'avatar') {
+    localStorage.setItem('glam_last_avatar', signedUrl);
+  }
+  
   return signedUrl;
 };
 
 export const saveWardrobeItem = async (item: Partial<WardrobeItem>): Promise<WardrobeItem> => {
-  // Mapping WardrobeItem (camelCase) to DB table columns (snake_case)
-  // FIX: Use camelCase property names when accessing the 'item' object (WardrobeItem)
   const dbItem = {
     user_id: item.userId,
     name: item.name,
@@ -151,11 +161,15 @@ export const saveWardrobeItem = async (item: Partial<WardrobeItem>): Promise<War
     primary_color: item.primaryColor,
     secondary_colors: item.secondaryColors,
     pattern: item.pattern,
+    // Using materialLook from item (Partial<WardrobeItem>) instead of material_look
     material_look: item.materialLook,
     seasonality: item.seasonality,
     formality: item.formality,
+    // Using warmthLevel from item instead of warmth_level
     warmth_level: item.warmthLevel,
+    // Using fitsWithColors from item instead of fits_with_colors
     fits_with_colors: item.fitsWithColors,
+    // Using occasionSuitability from item instead of occasion_suitability
     occasion_suitability: item.occasionSuitability,
     tags: item.tags,
     image_url: item.imageUrl,
@@ -180,8 +194,6 @@ export const saveWardrobeItem = async (item: Partial<WardrobeItem>): Promise<War
 };
 
 export const updateWardrobeItem = async (item: WardrobeItem): Promise<void> => {
-  // Mapping WardrobeItem (camelCase) to DB table columns (snake_case) for update
-  // FIX: Use camelCase property names when accessing the 'item' object (WardrobeItem)
   const { error } = await supabase
     .from('wardrobe_items')
     .update({
@@ -191,11 +203,15 @@ export const updateWardrobeItem = async (item: WardrobeItem): Promise<void> => {
       primary_color: item.primaryColor,
       secondary_colors: item.secondaryColors,
       pattern: item.pattern,
+      // Using materialLook from item (WardrobeItem) instead of material_look
       material_look: item.materialLook,
       seasonality: item.seasonality,
       formality: item.formality,
+      // Using warmthLevel from item instead of warmth_level
       warmth_level: item.warmthLevel,
+      // Using fitsWithColors from item instead of fits_with_colors
       fits_with_colors: item.fitsWithColors,
+      // Using occasionSuitability from item instead of occasion_suitability
       occasion_suitability: item.occasionSuitability,
       tags: item.tags,
       description: item.description,
@@ -221,9 +237,6 @@ export const deleteWardrobeItem = async (userId: string, itemId: string): Promis
     .remove([filePath]);
 };
 
-/**
- * Fetches all non-expired outfit cache entries for a user.
- */
 export const fetchOutfitCache = async (userId: string, wardrobeItems: WardrobeItem[]): Promise<Record<string, CachedOutfit>> => {
   const now = new Date().toISOString();
   const { data, error } = await supabase
@@ -240,24 +253,25 @@ export const fetchOutfitCache = async (userId: string, wardrobeItems: WardrobeIt
   const cache: Record<string, CachedOutfit> = {};
   
   (data || []).forEach(row => {
-    // Resolve wardrobe items from the current items list
-    const items = row.wardrobe_item_ids
+    const items = (row.wardrobe_item_ids || [])
       .map((id: string) => wardrobeItems.find(item => item.id === id))
       .filter(Boolean) as WardrobeItem[];
 
-    // Only add to cache if we still have at least some items
     if (items.length > 0) {
       cache[row.occasion] = {
         outfit: {
           id: row.outfit_id,
           name: row.outfit_name,
           items: items,
-          stylist_notes: row.stylist_notes,
+          stylistNotes: row.stylist_notes,
           occasion: row.occasion as Occasion
         },
         visualizedImage: row.visualized_image_url,
         generatedAt: new Date(row.generated_at).getTime(),
-        history: row.history || []
+        combinationHistory: row.history || [], // Map database 'history' column to combinationHistory
+        pastOutfits: [],
+        pastImages: [],
+        isRecycled: false
       };
     }
   });
@@ -265,24 +279,19 @@ export const fetchOutfitCache = async (userId: string, wardrobeItems: WardrobeIt
   return cache;
 };
 
-/**
- * Saves or updates an outfit cache entry in Supabase.
- */
 export const saveOutfitToCache = async (userId: string, occasion: string, cachedOutfit: CachedOutfit): Promise<void> => {
-  const { outfit, visualizedImage, history, generatedAt } = cachedOutfit;
+  const { outfit, visualizedImage, combinationHistory, generatedAt } = cachedOutfit;
   
   const wardrobeItemIds = outfit.items.map(i => i.id);
+
+  const signedUrl = visualizedImage ? await uploadWardrobeImage(userId, occasion, visualizedImage) : null;
   
-  // Upsert logic: Delete existing for this occasion/user and insert new
-  // Note: If you add a unique constraint on (user_id, occasion), you can use .upsert() directly.
-  // Here we do a delete then insert to be safe without knowing the exact constraints.
   await supabase
     .from('outfit_cache')
     .delete()
     .eq('user_id', userId)
     .eq('occasion', occasion);
 
-  // FIX: Use camelCase property name 'stylistNotes' when accessing the 'outfit' object
   const { error } = await supabase
     .from('outfit_cache')
     .insert([{
@@ -290,52 +299,53 @@ export const saveOutfitToCache = async (userId: string, occasion: string, cached
       outfit_id: outfit.id,
       outfit_name: outfit.name,
       wardrobe_item_ids: wardrobeItemIds,
-      stylist_notes: (outfit as any).stylistNotes || (outfit as any).stylist_notes,
+      // Property access is 'stylistNotes' (camelCase) to match Outfit interface
+      stylist_notes: outfit.stylistNotes,
       occasion: occasion,
-      visualized_image_url: visualizedImage,
+      visualized_image_url: signedUrl,
       generated_at: new Date(generatedAt).toISOString(),
       expires_at: new Date(generatedAt + 24 * 60 * 60 * 1000).toISOString(),
-      history: history || []
+      history: combinationHistory || [] // Persist combinationHistory to 'history' column
     }]);
 
   if (error) throw error;
 };
 
-/**
- * COMPREHENSIVE DELETION: Purges user record from auth.users via RPC
- * and removes all associated data across the database and storage.
- */
+export const deleteOutfitFromCache = async (userId: string, occasion: string): Promise<void> => {
+  const { error } = await supabase
+    .from('outfit_cache')
+    .delete()
+    .eq('user_id', userId)
+    .eq('occasion', occasion);
+
+  if (error) throw error;
+};
+
 export const deleteAllUserData = async (userId: string): Promise<void> => {
-  // 1. Gather item references for storage cleanup
+  localStorage.removeItem('glam_last_avatar');
   const { data: items } = await supabase
     .from('wardrobe_items')
     .select('item_id')
     .eq('user_id', userId);
 
-  // 2. Trigger RPC to delete the Auth account (Requires SECURITY DEFINER function)
-  const { error: rpcError } = await supabase.rpc('delete_user_account');
-  if (rpcError) {
-    console.warn("RPC deletion failed or not found. Falling back to data-only cleanup.", rpcError);
-  }
-
-  // 3. Clear data in public schema (Cascade should handle some, but explicit for safety)
   await supabase.from('user_profile').delete().eq('id', userId);
+  await supabase.from('outfit_cache').delete().eq('user_id', userId);
+  await supabase.from('wardrobe_items').delete().eq('user_id', userId);
 
-  const { error: dbError } = await supabase
-    .from('wardrobe_items')
-    .delete()
-    .eq('user_id', userId);
-
-  if (dbError) throw dbError;
-
-  // 4. Cleanup cloud storage files
+  const paths: string[] = [`${userId}/profile.jpg`, `${userId}/avatar.jpg`];
   if (items && items.length > 0) {
-    const paths = items.map(item => `${userId}/${item.item_id}.jpg`);
-    paths.push(`${userId}/profile.jpg`);
-    paths.push(`${userId}/avatar.jpg`);
+    items.forEach(item => paths.push(`${userId}/${item.item_id}.jpg`));
+  }
+  
+  // Fix: Consolidating 'Beach' and 'Vacation' to match the Occasion type definition 'Beach & Vacation'
+  const occasions: Occasion[] = ['Casual', 'Work', 'Date Night', 'Formal', 'Gym', 'Party', 'Wedding Guest', 'Weekend Brunch', 'Beach & Vacation', 'Concert & Festival', 'Job Interview', 'Business Trip', 'Lounge & Home'];
+  occasions.forEach(occ => paths.push(`${userId}/${occ}.jpg`));
     
+  try {
     await supabase.storage
       .from('glamorous')
       .remove(paths);
+  } catch (e) {
+    console.warn("Storage cleanup incomplete", e);
   }
 };
