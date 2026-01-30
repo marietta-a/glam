@@ -1,7 +1,11 @@
+
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { WardrobeItem, Occasion, OutfitCache, CachedOutfit, UserProfile } from '../types';
-import { Sparkles, Shirt, Plus, RefreshCcw, Wand2, User, Info, Check, Camera, Loader2, Sparkle, Download, AlertTriangle, X, Search, Scissors, PencilLine, ShoppingBag, Fingerprint, Scan, Eye, Heart, Layers, ArrowRight, Box, CheckCircle2, Globe } from 'lucide-react';
+import { Sparkles, Shirt, Plus, RefreshCcw, Wand2, User, Info, Check, Camera, Loader2, Sparkle, Download, AlertTriangle, X, Search, Scissors, PencilLine, ShoppingBag, Fingerprint, Scan, Eye, Heart, Layers, ArrowRight, Box, CheckCircle2, Globe, Lock, Crown, Zap } from 'lucide-react';
 import { t } from '../services/i18n';
+import { Capacitor } from '@capacitor/core';
+import { Filesystem, Directory } from '@capacitor/filesystem';
+import { Share } from '@capacitor/share';
 
 interface OutfitsViewProps {
   items: WardrobeItem[];
@@ -16,6 +20,7 @@ interface OutfitsViewProps {
   generationPhase: 'analyzing' | 'designing' | 'visualizing' | 'complete';
   onGenerate: (occasion: Occasion) => void;
   onItemClick?: (item: WardrobeItem) => void;
+  onPaywall?: () => void;
   lang?: string;
   isSettingFace?: boolean;
   onFaceUpload?: (base64: string) => void;
@@ -39,12 +44,15 @@ const OutfitsView: React.FC<OutfitsViewProps> = ({
   generationPhase,
   onGenerate,
   onItemClick,
+  onPaywall,
   lang = 'en',
   isSettingFace = false,
   onFaceUpload
 }) => {
   const [suitabilityIndex, setSuitabilityIndex] = useState(0);
   const faceInputRef = useRef<HTMLInputElement>(null);
+
+  const isOutOfResources = (profile?.total_generations || 0) >= 15 && (profile?.credits || 0) <= 0 && !profile?.is_premium;
 
   const currentOutfit = useMemo(() => {
     return selectedOccasion ? cache[selectedOccasion] : null;
@@ -71,8 +79,14 @@ const OutfitsView: React.FC<OutfitsViewProps> = ({
 
   const onOccasionClick = (occ: Occasion) => {
     if (isGenerating || isVisualizing || !profile?.avatar_url) return;
+    
+    // Strict Gating: If out of resources and not cached, trigger paywall instead of switching
+    if (isOutOfResources && !cache[occ]) {
+      onPaywall?.();
+      return;
+    }
+    
     onOccasionChange(occ);
-    if (!cache[occ]) onGenerate(occ);
   };
 
   const handleFaceSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -86,18 +100,32 @@ const OutfitsView: React.FC<OutfitsViewProps> = ({
 
   const handleDownload = async () => {
     if (!currentOutfit?.visualizedImage) return;
-    const filename = `GlamAI-${selectedOccasion?.replace(/\s+/g, '')}-Reality.png`;
+    const filename = `GlamAI-${selectedOccasion?.replace(/\s+/g, '')}.png`;
     try {
-      const response = await fetch(currentOutfit.visualizedImage);
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
+      if (Capacitor.isNativePlatform()) {
+        const base64Data = currentOutfit.visualizedImage.split(',')[1];
+        const savedFile = await Filesystem.writeFile({
+          path: filename,
+          data: base64Data,
+          directory: Directory.Cache,
+        });
+        await Share.share({
+          title: 'Save your GlamAI Outfit',
+          url: savedFile.uri,
+          dialogTitle: 'Save or Share Style',
+        });
+      } else {
+        const response = await fetch(currentOutfit.visualizedImage);
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      }
     } catch (e) { console.error('Download failed:', e); }
   };
 
@@ -183,7 +211,15 @@ const OutfitsView: React.FC<OutfitsViewProps> = ({
       </div>
 
       <div className="space-y-4">
-        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Simulation Objective</p>
+        <div className="flex items-center justify-between px-1">
+          <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Simulation Objective</p>
+          {isOutOfResources && (
+            <div className="flex items-center space-x-2 text-red-500">
+               <AlertTriangle className="w-3 h-3" />
+               <span className="text-[8px] font-black uppercase tracking-widest">Archival Blocked</span>
+            </div>
+          )}
+        </div>
         <div className="flex space-x-2 overflow-x-auto no-scrollbar pb-2 -mx-1 px-1">
           {OCCASIONS.map((occ) => {
             const isSelected = selectedOccasion === occ;
@@ -199,6 +235,11 @@ const OutfitsView: React.FC<OutfitsViewProps> = ({
                 <span className="relative z-10 truncate">{occ}</span>
                 {hasCached && !isSelected && (
                   <div className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-[#26A69A]" />
+                )}
+                {isOutOfResources && !hasCached && (
+                  <div className="absolute inset-0 bg-white/40 flex items-center justify-center backdrop-blur-[1px]">
+                    <Lock className="w-3 h-3 text-gray-300" />
+                  </div>
                 )}
               </button>
             );
@@ -274,7 +315,14 @@ const OutfitsView: React.FC<OutfitsViewProps> = ({
                   {currentOutfit.visualizedImage && (
                     <button onClick={handleDownload} className="p-4 bg-white/90 backdrop-blur-xl rounded-[20px] shadow-xl text-gray-400 hover:text-[#26A69A] transition-all"><Download className="w-5 h-5" /></button>
                   )}
-                  <button onClick={() => onGenerate(selectedOccasion!)} disabled={isGenerating || isVisualizing} className="p-4 bg-white/90 backdrop-blur-xl rounded-[20px] shadow-xl text-gray-400 hover:text-[#26A69A] transition-all"><RefreshCcw className="w-5 h-5" /></button>
+                  {isOutOfResources ? (
+                    <button onClick={() => onPaywall?.()} className="p-4 bg-white/90 backdrop-blur-xl rounded-[20px] shadow-xl text-red-400 hover:text-red-500 transition-all relative group">
+                      <Lock className="w-5 h-5" />
+                      <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border border-white" />
+                    </button>
+                  ) : (
+                    <button onClick={() => onGenerate(selectedOccasion!)} disabled={isGenerating || isVisualizing} className="p-4 bg-white/90 backdrop-blur-xl rounded-[20px] shadow-xl text-gray-400 hover:text-[#26A69A] transition-all"><RefreshCcw className="w-5 h-5" /></button>
+                  )}
                 </div>
                 <div className="absolute bottom-0 left-0 right-0 p-10 bg-gradient-to-t from-black/80 to-transparent z-20">
                   <h3 className="text-3xl font-black text-white uppercase tracking-tight">{currentOutfit.outfit.name}</h3>
@@ -307,10 +355,57 @@ const OutfitsView: React.FC<OutfitsViewProps> = ({
               </div>
             </div>
           </div>
+        ) : selectedOccasion ? (
+          <div className="flex-1 flex flex-col items-center justify-center p-12 text-center animate-in fade-in slide-in-from-bottom-4 duration-500">
+             <div className="relative mb-8">
+                <div className="absolute inset-0 bg-[#26A69A]/5 rounded-full blur-2xl scale-150" />
+                <div className="relative w-24 h-24 bg-white rounded-[32px] shadow-xl border border-gray-50 flex items-center justify-center">
+                   {isOutOfResources ? <Lock className="w-10 h-10 text-red-400" /> : <Sparkles className="w-10 h-10 text-[#26A69A]" />}
+                </div>
+             </div>
+             
+             {isOutOfResources ? (
+               <div className="space-y-6 flex flex-col items-center">
+                  <div>
+                    <h3 className="text-xl font-black text-gray-900 uppercase tracking-tight mb-2">Archival Block</h3>
+                    <p className="text-[11px] text-gray-400 font-bold uppercase tracking-[2px] max-w-[200px] mx-auto leading-relaxed">
+                      Your digital signature cannot be synthesized without archival resources. Viewing existing records is still permitted.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => onPaywall?.()}
+                    className="group px-8 py-5 bg-zinc-900 text-white rounded-[28px] shadow-2xl shadow-teal-900/10 active:scale-95 transition-all flex items-center space-x-4"
+                  >
+                     <div className="p-2 bg-white/10 rounded-xl group-hover:bg-[#26A69A] transition-colors">
+                        <Zap className="w-4 h-4 text-amber-500" />
+                     </div>
+                     <span className="text-[11px] font-black uppercase tracking-[3px]">Refill Boutique Resources</span>
+                  </button>
+               </div>
+             ) : (
+               <div className="space-y-6 flex flex-col items-center">
+                  <div>
+                    <h3 className="text-xl font-black text-gray-900 uppercase tracking-tight mb-2">Elite Curation Pending</h3>
+                    <p className="text-[11px] text-gray-400 font-bold uppercase tracking-[2px] max-w-[200px] mx-auto leading-relaxed mb-10">
+                       {selectedOccasion} protocol ready. Initialize archival synthesis to discover your signature look.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => onGenerate(selectedOccasion!)}
+                    className="group px-8 py-5 bg-[#1a1a1a] text-white rounded-[28px] shadow-2xl shadow-teal-900/10 active:scale-95 transition-all flex items-center space-x-4"
+                  >
+                     <div className="p-2 bg-white/10 rounded-xl group-hover:bg-[#26A69A] transition-colors">
+                        <Sparkles className="w-4 h-4" />
+                     </div>
+                     <span className="text-[11px] font-black uppercase tracking-[3px]">Initiate {selectedOccasion} Simulation</span>
+                  </button>
+               </div>
+             )}
+          </div>
         ) : (
            <div className="flex-1 flex flex-col items-center justify-center p-12 text-center animate-in fade-in duration-500">
               <div className="w-20 h-20 bg-gray-50 rounded-[32px] flex items-center justify-center mb-8"><Sparkle className="w-8 h-8 text-gray-200" /></div>
-              <h3 className="text-xl font-black text-gray-900 uppercase tracking-tight mb-2">Initialize VR Simulation</h3>
+              <h3 className="text-xl font-black text-gray-900 uppercase tracking-tight mb-2">Initialize Stylist</h3>
               <p className="text-xs text-gray-400 font-medium px-4">Choose an objective above to simulate your archival pieces in hyper-realistic reality.</p>
            </div>
         )}

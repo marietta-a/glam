@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import pLimit from 'p-limit';
 import { WardrobeItem, Category, ViewType, OutfitCache, CachedOutfit, UserProfile, Occasion, UploadTask, Outfit, ORDERED_OCCASIONS } from './types';
@@ -15,7 +16,9 @@ import {
   saveOutfitToCache, 
   deleteOutfitFromCache,
   logoutUser,
-  compressImage
+  compressImage,
+  useGenerationCredit,
+  addCredits
 } from './services/wardrobeService';
 import { 
   suggestOutfit, 
@@ -39,9 +42,11 @@ import SettingsModal from './components/SettingsModal';
 import UserManualModal from './components/UserManualModal';
 import ItemDetailsModal from './components/ItemDetailsModal';
 import EmptyWardrobe from './components/EmptyWardrobe';
+import EmptyCategory from './components/EmptyCategory';
 import Auth from './components/Auth';
 import BrandLogo from './components/BrandLogo';
 import SyncingWardrobe from './components/SyncingWardrobe';
+import Paywall from './components/Paywall';
 import { t } from './services/i18n';
 
 const limit = pLimit(2);
@@ -120,6 +125,7 @@ const App: React.FC = () => {
   const [showSuitabilityModal, setShowSuitabilityModal] = useState(false);
   const [modalType, setModalType] = useState<'mismatch' | 'exhausted'>('mismatch');
   const [pendingOccasion, setPendingOccasion] = useState<Occasion | null>(null);
+  const [isPaywallOpen, setIsPaywallOpen] = useState(false);
   
   const mainScrollRef = useRef<HTMLElement>(null);
 
@@ -169,26 +175,33 @@ const App: React.FC = () => {
     }
   }, [user]);
 
-  useEffect(() => {
-    if (uploadTasks.length > 0 && activeView === 'wardrobe') {
-      mainScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+  const handleUseCredit = async () => {
+    if (!profile) return;
+    try {
+      const updatedProfile = await useGenerationCredit(profile);
+      setProfile(updatedProfile);
+      store.updateProfile(updatedProfile);
+    } catch (err: any) {
+      if (err.message === 'OUT_OF_CREDITS') {
+        setIsPaywallOpen(true);
+        throw err;
+      }
     }
-  }, [uploadTasks.length, activeView]);
-
-  useEffect(() => {
-    if (activeView === 'outfits' && !selectedOccasion && Object.keys(outfitCache).length > 0) {
-      const firstOcc = ORDERED_OCCASIONS.find(occ => !!outfitCache[occ]);
-      if (firstOcc) setSelectedOccasion(firstOcc);
-    }
-  }, [activeView, outfitCache, selectedOccasion]);
+  };
 
   const handleGenerateOutfit = async (occasion: Occasion, isUniversalMode = false) => {
     if (!profile?.avatar_url) { setActiveView('outfits'); return; }
 
+    const generations = profile.total_generations || 0;
+    const credits = profile.credits || 0;
+    if (generations >= 15 && credits <= 0 && !profile.is_premium) {
+      setIsPaywallOpen(true);
+      return;
+    }
+
     const oldCache = outfitCache[occasion];
     const strictlyMatched = items.filter(i => isItemSuitableForOccasion(i, occasion));
     
-    // Logic: Do not show Mismatch if items exist.
     if (!isUniversalMode && strictlyMatched.length < 1) {
       setPendingOccasion(occasion);
       setModalType('mismatch');
@@ -206,11 +219,7 @@ const App: React.FC = () => {
       
       const outfit = await suggestOutfit(items, occasion, profile, blacklist, isUniversalMode);
       
-      // Logic: Only show Exhausted if AI returns true AND we actually lack suitable options (or have tried them all).
-      // Per user request: Do not show Exhausted if there are suitable items for the occasion unless literally all combinations are used.
       if (outfit.noMoreCombinations && !isUniversalMode && strictlyMatched.length > 0) {
-         // If AI claims no more combinations but we have suitable items, we check history length.
-         // If history is still small relative to item pool, force the AI to retry or just proceed with what it gave us.
          if (blacklist.length < 5) {
             outfit.noMoreCombinations = false;
          }
@@ -244,6 +253,8 @@ const App: React.FC = () => {
       const visualizedRaw = await visualizeOutfit(outfit, profile);
       const visualized = await compressImage(visualizedRaw, 1024, 0.75);
       
+      await handleUseCredit();
+
       const finalCacheItem: CachedOutfit = { 
         ...intermediateCacheItem,
         visualizedImage: visualized,
@@ -264,6 +275,33 @@ const App: React.FC = () => {
     }
   };
 
+  const handleSubscribe = async (pack: 'starter' | 'growth' | 'pro' | 'premium_monthly') => {
+    let amount = 0;
+    let isSub = false;
+
+    if (pack === 'starter') amount = 50;
+    else if (pack === 'growth') amount = 200;
+    else if (pack === 'pro') amount = 500;
+    else if (pack === 'premium_monthly') isSub = true;
+
+    setIsPaywallOpen(false);
+    setLoading(true);
+    try {
+      if (profile) {
+        let updated = profile;
+        if (isSub) {
+           updated = { ...profile, is_premium: true, credits: (profile.credits || 0) + 1000 };
+           await updateUserProfile(updated);
+        } else {
+           updated = await addCredits(profile, amount);
+        }
+        setProfile(updated);
+        store.updateProfile(updated);
+        alert(isSub ? "Elite Membership Activated! The Style Lab is now unlocked." : `Success! ${amount} credits have been added.`);
+      }
+    } catch (e) { console.error(e); } finally { setLoading(false); }
+  };
+
   const itemMatchesTab = (item: WardrobeItem, tab: Category): boolean => {
     if (tab === 'All Items') return true;
     return item.category === tab;
@@ -271,59 +309,43 @@ const App: React.FC = () => {
 
   const handleStartUpload = async (inputs: string[]) => {
     if (!user) return;
-    
     setActiveView('wardrobe');
     setActiveTab('All Items');
-    
-    requestAnimationFrame(() => {
-      mainScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
-    });
-
+    requestAnimationFrame(() => { mainScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' }); });
     const tasks = inputs.map((input) => async () => {
       const taskId = Math.random().toString(36).substr(2, 9);
       setUploadTasks(prev => [...prev, { id: taskId, status: 'analyzing', progress: 5, previewUrl: input }]);
-
       const updateTask = (updates: Partial<UploadTask>) => 
         setUploadTasks(prev => prev.map(t => t.id === taskId ? { ...t, ...updates } : t));
-
       try {
         updateTask({ progress: 10 });
         const base64 = await getBase64Data(input);
-        
         updateTask({ status: 'analyzing', progress: 20 });
         const results = await analyzeUpload(base64, profile?.language || 'en');
-        
         if (!results || results.length === 0) throw new Error("No items detected.");
-
         updateTask({ totalItemsInBatch: results.length, processedItemsInBatch: 0, progress: 30 });
-
         await Promise.all(results.map(async (itemData, index) => {
           return limit(async () => {
             try {
               const startProgress = 30 + (index / results.length) * 60;
               updateTask({ status: 'illustrating', progress: startProgress });
-              
               const isolatedBase64 = await generateItemImage(itemData, base64);
               const finalImageUrl = await uploadWardrobeImage(user.id, `item_${Math.random().toString(36).substr(2, 9)}`, isolatedBase64);
-              
               const newItem = await saveWardrobeItem({
                 ...itemData,
                 userId: user.id,
                 imageUrl: finalImageUrl, 
                 isFavorite: false
               });
-              
               setItems(prev => {
                 const combined = [newItem, ...prev];
                 store.updateItems(combined);
                 return combined;
               });
-              
               updateTask({ processedItemsInBatch: (index + 1) });
             } catch (e) { console.error("Item sync failed", e); }
           });
         }));
-
         setUploadTasks(prev => prev.filter(t => t.id !== taskId));
       } catch (err: any) {
         console.error("Task error", err);
@@ -331,7 +353,6 @@ const App: React.FC = () => {
         setTimeout(() => setUploadTasks(prev => prev.filter(t => t.id !== taskId)), 8000);
       }
     });
-
     await Promise.all(tasks.map(t => limit(t)));
   };
 
@@ -339,10 +360,20 @@ const App: React.FC = () => {
   if (loading) return <BoutiqueLoader progress={initProgress} />;
 
   const lang = profile?.language || 'en';
+  const filteredItems = items.filter(i => itemMatchesTab(i, activeTab));
 
   return (
     <div className="min-h-screen bg-[#F7F9FA] flex flex-col max-w-md mx-auto shadow-2xl relative overflow-x-hidden pb-32">
-      <Header title={t('digital_boutique', lang)} onProfileClick={() => setIsProfileOpen(true)} onMenuClick={() => setIsSidebarOpen(true)} profileImage={profile?.avatar_url || null} currentLang={lang} onLanguageChange={(l) => { const updated = { ...profile!, language: l }; setProfile(updated); store.updateProfile(updated); updateUserProfile({ id: profile!.id, language: l }); }} />
+      <Header 
+        title={t('digital_boutique', lang)} 
+        onProfileClick={() => setIsProfileOpen(true)} 
+        onMenuClick={() => setIsSidebarOpen(true)} 
+        profileImage={profile?.avatar_url || null} 
+        currentLang={lang} 
+        credits={profile?.credits}
+        isPremium={profile?.is_premium}
+        onLanguageChange={(l) => { const updated = { ...profile!, language: l }; setProfile(updated); store.updateProfile(updated); updateUserProfile({ id: profile!.id, language: l }); }} 
+      />
       <main ref={mainScrollRef} className="flex-1 flex flex-col overflow-y-auto custom-scrollbar">
         {activeView === 'wardrobe' && (
           <>
@@ -356,27 +387,50 @@ const App: React.FC = () => {
               {items.length === 0 && uploadTasks.length === 0 ? (
                 <EmptyWardrobe onAdd={() => setIsAddItemOpen(true)} lang={lang} />
               ) : (
-                <div className="grid grid-cols-2 gap-4 mt-2">
-                  {items
-                    .filter(i => itemMatchesTab(i, activeTab))
-                    .map(item => <ItemCard key={item.id} item={item} onClick={setSelectedItem} />)
-                  }
+                <div className="mt-2">
+                  {filteredItems.length === 0 && uploadTasks.length === 0 ? (
+                    <EmptyCategory category={activeTab} onAdd={() => setIsAddItemOpen(true)} lang={lang} />
+                  ) : (
+                    <div className="grid grid-cols-2 gap-4">
+                      {filteredItems.map(item => <ItemCard key={item.id} item={item} onClick={setSelectedItem} />)}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
           </>
         )}
-        {activeView === 'outfits' && <OutfitsView items={items} profile={profile} onAddClick={() => setIsAddItemOpen(true)} cache={outfitCache} onUpdateCache={(o, d) => { const next = { ...outfitCache, [o]: d }; setOutfitCache(next); store.updateCache(next); }} selectedOccasion={selectedOccasion} onOccasionChange={setSelectedOccasion} isGenerating={isGenerating} isVisualizing={isVisualizing} generationPhase={generationPhase} onGenerate={handleGenerateOutfit} onItemClick={setSelectedItem} lang={lang} isSettingFace={isAnalyzingFace} onFaceUpload={async (b) => { setIsAnalyzingFace(true); try { const url = await uploadWardrobeImage(user.id, 'avatar', b); const updated = { ...profile!, avatar_url: url }; setProfile(updated); setLastKnownAvatar(url); store.updateProfile(updated); await updateUserProfile({ id: profile!.id, avatar_url: url }); } finally { setIsAnalyzingFace(false); } }} />}
-        {activeView === 'explore' && <ExploreView lang={lang} profile={profile} items={items} />}
+        {activeView === 'outfits' && (
+          <OutfitsView 
+            items={items} 
+            profile={profile} 
+            onAddClick={() => setIsAddItemOpen(true)} 
+            cache={outfitCache} 
+            onUpdateCache={(o, d) => { const next = { ...outfitCache, [o]: d }; setOutfitCache(next); store.updateCache(next); }} 
+            selectedOccasion={selectedOccasion} 
+            onOccasionChange={setSelectedOccasion} 
+            isGenerating={isGenerating} 
+            isVisualizing={isVisualizing} 
+            generationPhase={generationPhase} 
+            onGenerate={handleGenerateOutfit} 
+            onItemClick={setSelectedItem} 
+            lang={lang} 
+            isSettingFace={isAnalyzingFace} 
+            onPaywall={() => setIsPaywallOpen(true)}
+            onFaceUpload={async (b) => { setIsAnalyzingFace(true); try { const url = await uploadWardrobeImage(user.id, 'avatar', b); const updated = { ...profile!, avatar_url: url }; setProfile(updated); setLastKnownAvatar(url); store.updateProfile(updated); await updateUserProfile({ id: profile!.id, avatar_url: url }); } finally { setIsAnalyzingFace(false); } }} 
+          />
+        )}
+        {activeView === 'explore' && <ExploreView lang={lang} profile={profile} items={items} onUseCredit={handleUseCredit} onPaywall={() => setIsPaywallOpen(true)} />}
       </main>
       <BottomNav activeView={activeView} onViewChange={setActiveView} onAddClick={() => setIsAddItemOpen(true)} isStyling={isGenerating || isVisualizing} hasBackgroundTasks={uploadTasks.length > 0} lang={lang} />
       
-      {isSidebarOpen && <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} onSettingsClick={() => setIsSettingsOpen(true)} onManualClick={() => setIsManualOpen(true)} onLogout={() => logoutUser()} email={user.email || ''} username={profile?.username} isPremium={profile?.is_premium} lang={lang} />}
+      {isSidebarOpen && <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} onSettingsClick={() => setIsSettingsOpen(true)} onManualClick={() => setIsManualOpen(true)} onLogout={() => logoutUser()} email={user.email || ''} username={profile?.username} isPremium={profile?.is_premium} lang={lang} credits={profile?.credits} onUpgrade={() => setIsPaywallOpen(true)} />}
       {isProfileOpen && profile && <ProfileModal isOpen={isProfileOpen} userId={user.id} onClose={() => setIsProfileOpen(false)} profile={profile} onUpdate={(p) => { setProfile(p); store.updateProfile(p); }} lang={lang} />}
       {isSettingsOpen && <SettingsModal isOpen={isSettingsOpen} userId={user.id} email={user.email || ''} onClose={() => setIsSettingsOpen(false)} profile={profile} onUpdate={(p) => { setProfile(p); store.updateProfile(p); }} />}
       {isManualOpen && <UserManualModal isOpen={isManualOpen} onClose={() => setIsManualOpen(false)} lang={lang} />}
       <AddItemModal isOpen={isAddItemOpen} onClose={() => setIsAddItemOpen(false)} onStartUpload={handleStartUpload} lang={lang} />
       {selectedItem && <ItemDetailsModal item={selectedItem} userId={user.id} isOpen={!!selectedItem} onClose={() => setSelectedItem(null)} onSave={(updated) => { setItems(prev => prev.map(i => i.id === updated.id ? updated : i)); setSelectedItem(updated); }} onDelete={(id) => { setItems(prev => prev.filter(i => i.id !== id)); }} lang={lang} />}
+      {isPaywallOpen && <Paywall isOpen={isPaywallOpen} onClose={() => setIsPaywallOpen(false)} onSubscribe={handleSubscribe} lang={lang} totalGenerations={profile?.total_generations} />}
 
       {showSuitabilityModal && (
         <div className="fixed inset-0 z-[500] flex items-center justify-center p-8 bg-black/80 backdrop-blur-xl animate-in fade-in duration-300">
