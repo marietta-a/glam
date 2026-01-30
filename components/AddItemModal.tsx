@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
-import { X, Upload, Globe, AlertCircle, Sparkles } from 'lucide-react';
+import { X, Upload, Globe, AlertCircle, Sparkles, Download, Loader2 } from 'lucide-react';
 import { t } from '../services/i18n';
+import { getBase64Data } from '../services/geminiService';
 
 interface AddItemModalProps {
   isOpen: boolean;
@@ -12,6 +13,8 @@ interface AddItemModalProps {
 const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, onStartUpload, lang = 'en' }) => {
   const [uploadMode, setUploadMode] = useState<'file' | 'url'>('file');
   const [imageUrl, setImageUrl] = useState('');
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [corsError, setCorsError] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -46,8 +49,29 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, onStartUpl
     e.preventDefault();
     if (!imageUrl.trim()) return;
     
-    onStartUpload([imageUrl]);
-    onClose();
+    setIsVerifying(true);
+    setCorsError(false);
+    setError(null);
+
+    try {
+      // Pre-check the URL for CORS issues before closing the modal
+      // This preserves the user's state (the URL input) if it fails
+      await getBase64Data(imageUrl);
+      
+      const urlToUpload = imageUrl;
+      setImageUrl(''); 
+      onStartUpload([urlToUpload]);
+      onClose();
+    } catch (err: any) {
+      console.error("URL Verification Error:", err);
+      if (err.message === "CORS_OR_NETWORK_ERROR" || err.message.includes("FETCH")) {
+        setCorsError(true);
+      } else {
+        setError(err.message || "Archive sync error");
+      }
+    } finally {
+      setIsVerifying(false);
+    }
   };
 
   return (
@@ -69,13 +93,13 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, onStartUpl
           <div className="space-y-6">
             <div className="flex p-1.5 bg-gray-50 rounded-2xl">
               <button 
-                onClick={() => setUploadMode('file')} 
+                onClick={() => { setUploadMode('file'); setCorsError(false); setError(null); }} 
                 className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${uploadMode === 'file' ? 'bg-white shadow-md text-[#26A69A]' : 'text-gray-400'}`}
               >
                 {t('gallery', lang)}
               </button>
               <button 
-                onClick={() => setUploadMode('url')} 
+                onClick={() => { setUploadMode('url'); setCorsError(false); setError(null); }} 
                 className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${uploadMode === 'url' ? 'bg-white shadow-md text-[#26A69A]' : 'text-gray-400'}`}
               >
                 {t('direct_link', lang)}
@@ -94,28 +118,57 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, onStartUpl
             ) : (
               <form onSubmit={handleUrlSubmit} className="space-y-4 py-2">
                 <div className="relative">
-                  <Globe className="absolute left-6 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-300" />
+                  <Globe className={`absolute left-6 top-1/2 -translate-y-1/2 w-5 h-5 transition-colors ${isVerifying ? 'text-[#26A69A] animate-pulse' : 'text-gray-300'}`} />
                   <input 
                     type="url" 
                     value={imageUrl} 
-                    onChange={(e) => setImageUrl(e.target.value)} 
+                    onChange={(e) => { setImageUrl(e.target.value); setCorsError(false); setError(null); }} 
                     placeholder="Source URL..." 
-                    className="w-full bg-gray-50 border-none rounded-[24px] pl-16 pr-6 py-5 text-sm outline-none focus:ring-2 focus:ring-[#26A69A]/30 transition-all" 
+                    disabled={isVerifying}
+                    className="w-full bg-gray-50 border-none rounded-[24px] pl-16 pr-6 py-5 text-sm outline-none focus:ring-2 focus:ring-[#26A69A]/30 transition-all disabled:opacity-50" 
                     required 
                   />
                 </div>
-                <button type="submit" className="w-full py-5 bg-[#26A69A] text-white font-black uppercase tracking-widest text-[11px] rounded-[24px] shadow-lg active:scale-95 transition-all">
-                  {t('sync_link', lang)}
+                
+                {corsError && (
+                  <div className="bg-red-50 p-6 rounded-[32px] border border-red-100 flex flex-col items-center text-center animate-in slide-in-from-top-4 duration-500">
+                    <div className="p-3 bg-white rounded-2xl shadow-sm mb-4">
+                      <Download className="w-5 h-5 text-red-500" />
+                    </div>
+                    <p className="text-[11px] text-red-600 font-bold leading-relaxed mb-2 uppercase tracking-wide">
+                      Direct Sync Blocked
+                    </p>
+                    <p className="text-[10px] text-red-500/70 font-medium leading-relaxed italic">
+                      This site restricts automated archival. For a flawless record, please download the image and upload it from your gallery.
+                    </p>
+                  </div>
+                )}
+
+                <button 
+                  type="submit" 
+                  disabled={isVerifying}
+                  className="w-full py-5 bg-[#26A69A] text-white font-black uppercase tracking-widest text-[11px] rounded-[24px] shadow-lg active:scale-95 transition-all flex items-center justify-center space-x-2 disabled:opacity-50"
+                >
+                  {isVerifying ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Verifying Archive...</span>
+                    </>
+                  ) : (
+                    <span>{t('sync_link', lang)}</span>
+                  )}
                 </button>
               </form>
             )}
 
-            <div className="bg-teal-50/50 p-6 rounded-[32px] border border-teal-50 flex items-start space-x-4">
-              <Sparkles className="w-5 h-5 text-[#26A69A] flex-shrink-0 mt-1" />
-              <p className="text-[11px] text-[#26A69A] font-bold leading-relaxed">
-                {t('cloud_msg', lang)}
-              </p>
-            </div>
+            {!corsError && (
+              <div className="bg-teal-50/50 p-6 rounded-[32px] border border-teal-50 flex items-start space-x-4">
+                <Sparkles className="w-5 h-5 text-[#26A69A] flex-shrink-0 mt-1" />
+                <p className="text-[11px] text-[#26A69A] font-bold leading-relaxed">
+                  {t('cloud_msg', lang)}
+                </p>
+              </div>
+            )}
 
             {error && (
               <div className="p-4 bg-red-50 rounded-[20px] flex items-center space-x-3 text-red-500">

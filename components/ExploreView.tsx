@@ -1,14 +1,19 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { 
   Compass, Sparkles, TrendingUp, Zap, ChevronRight, 
   Upload, Camera, Loader2, X, Image as ImageIcon, 
   CheckCircle2, User, Shirt, Info, Trash2, PenTool, 
-  UserCheck, Layers, Star, Eraser, ExternalLink, Plus 
+  UserCheck, Layers, Star, Eraser, ExternalLink, Plus,
+  Grid, Search, Download
 } from 'lucide-react';
 import { t } from '../services/i18n';
-import { restoreFashionImage, processQuickDress, getBase64Data, RestorationMode } from '../services/geminiService';
+import { restoreFashionImage, processQuickDress, getBase64Data, RestorationMode, analyzeUpload } from '../services/geminiService';
 import { compressImage } from '../services/wardrobeService';
-import { UserProfile } from '../types';
+import { UserProfile, WardrobeItem } from '../types';
+import { Capacitor } from '@capacitor/core';
+import { Filesystem, Directory } from '@capacitor/filesystem';
+import { Share } from '@capacitor/share';
 
 interface BeautyCategory {
   id: string;
@@ -70,21 +75,32 @@ const BEAUTY_CATEGORIES: BeautyCategory[] = [
   }
 ];
 
+interface DressMeItem {
+  url: string;
+  metadata: Partial<WardrobeItem>;
+  isAnalyzing: boolean;
+}
+
 interface ExploreViewProps {
   lang?: string;
   profile?: UserProfile | null;
+  items?: WardrobeItem[];
 }
 
-const ExploreView: React.FC<ExploreViewProps> = ({ lang = 'en', profile }) => {
+const ExploreView: React.FC<ExploreViewProps> = ({ lang = 'en', profile, items = [] }) => {
   const [activeTool, setActiveTool] = useState<'dressme' | 'restore' | null>(null);
   const [activeCategory, setActiveCategory] = useState<string>('view_all');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isCleaningClothing, setIsCleaningClothing] = useState(false);
   const [resultImage, setResultImage] = useState<string | null>(null);
   const [userRequest, setUserRequest] = useState('');
   const [restoreUserRequest, setRestoreUserRequest] = useState('');
   const [restoreSource, setRestoreSource] = useState<string | null>(null);
   const [restoreMode, setRestoreMode] = useState<RestorationMode>('portrait');
-  const [dressMeImages, setDressMeImages] = useState<{ clothes: string[], avatar: string | null }>({ 
+  const [showAddMenu, setShowAddMenu] = useState(false);
+  const [showWardrobePicker, setShowWardrobePicker] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [dressMeImages, setDressMeImages] = useState<{ clothes: DressMeItem[], avatar: string | null }>({ 
     clothes: [], 
     avatar: null 
   });
@@ -110,12 +126,15 @@ const ExploreView: React.FC<ExploreViewProps> = ({ lang = 'en', profile }) => {
   const resetLab = () => {
     setActiveTool(null);
     setIsProcessing(false);
+    setIsCleaningClothing(false);
     setResultImage(null);
     setUserRequest('');
     setRestoreUserRequest('');
     setRestoreSource(null);
     setRestoreMode('portrait');
     setDressMeImages({ clothes: [], avatar: null });
+    setShowAddMenu(false);
+    setShowWardrobePicker(false);
   };
 
   const handleRestore = async () => {
@@ -142,19 +161,59 @@ const ExploreView: React.FC<ExploreViewProps> = ({ lang = 'en', profile }) => {
     }
   };
 
+  const processClothingImage = async (base64: string, itemData?: Partial<WardrobeItem>) => {
+    // Add item to list immediately as analyzing
+    setDressMeImages(prev => ({ 
+      ...prev, 
+      clothes: [...prev.clothes, { url: base64, metadata: itemData || {}, isAnalyzing: !itemData }].slice(0, 4) 
+    }));
+
+    if (!itemData) {
+      try {
+        const compressed = await compressImage(base64, 800, 0.7);
+        const analyzed = await analyzeUpload(compressed, lang);
+        if (analyzed && analyzed.length > 0) {
+          const firstItem = analyzed[0];
+          setDressMeImages(prev => ({
+            ...prev,
+            clothes: prev.clothes.map(c => c.url === base64 ? { ...c, metadata: firstItem, isAnalyzing: false } : c)
+          }));
+        } else {
+           setDressMeImages(prev => ({
+            ...prev,
+            clothes: prev.clothes.map(c => c.url === base64 ? { ...c, isAnalyzing: false } : c)
+          }));
+        }
+      } catch (err) {
+        console.error("Clothing analysis failed:", err);
+        setDressMeImages(prev => ({
+          ...prev,
+          clothes: prev.clothes.map(c => c.url === base64 ? { ...c, isAnalyzing: false } : c)
+        }));
+      }
+    }
+  };
+
   const handleClothingSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files) {
       Array.from(files).forEach(file => {
         const reader = new FileReader();
-        reader.onload = () => {
-          setDressMeImages(prev => ({ 
-            ...prev, 
-            clothes: [...prev.clothes, reader.result as string].slice(0, 4) 
-          }));
-        };
+        reader.onload = () => processClothingImage(reader.result as string);
         reader.readAsDataURL(file as unknown as Blob);
       });
+    }
+    setShowAddMenu(false);
+  };
+
+  const handleWardrobeItemPick = async (item: WardrobeItem) => {
+    setShowWardrobePicker(false);
+    setShowAddMenu(false);
+    try {
+      const base64Data = await getBase64Data(item.imageUrl);
+      await processClothingImage(`data:image/jpeg;base64,${base64Data}`, item);
+    } catch (e) {
+      console.error("Failed to fetch wardrobe item for DressMe", e);
     }
   };
 
@@ -174,19 +233,77 @@ const ExploreView: React.FC<ExploreViewProps> = ({ lang = 'en', profile }) => {
     }));
   };
 
+  const handleDownload = async () => {
+    if (!resultImage) return;
+    const filename = `GlamAI-Lab-Result-${Date.now()}.png`;
+
+    try {
+      const response = await fetch(resultImage);
+      const blob = await response.blob();
+
+      if (Capacitor.isNativePlatform()) {
+        const reader = new FileReader();
+        reader.readAsDataURL(blob);
+        reader.onloadend = async () => {
+          const resultStr = reader.result as string;
+          // Capacitor Filesystem needs raw base64 (prefix stripped)
+          const base64Data = resultStr.split(',')[1]; 
+          const savedFile = await Filesystem.writeFile({
+            path: filename,
+            data: base64Data,
+            directory: Directory.Cache,
+          });
+
+          await Share.share({
+            title: 'Save your GlamAI Result',
+            text: 'Check out this Vogue result from GlamAI!',
+            url: savedFile.uri,
+            dialogTitle: 'Save or Share',
+          });
+        };
+      } else {
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      }
+    } catch (error) {
+      console.error('Download failed:', error);
+    }
+  };
+
   const handleDressMeSimulation = async () => {
     if (dressMeImages.clothes.length === 0 || !dressMeImages.avatar) return;
+    
+    // Check if any items are still analyzing
+    if (dressMeImages.clothes.some(c => c.isAnalyzing)) {
+      alert("Please wait for all items to be analyzed.");
+      return;
+    }
+
     setIsProcessing(true);
     try {
       const compressedClothes = await Promise.all(
-        dressMeImages.clothes.map(c => compressImage(c, 800, 0.7))
+        dressMeImages.clothes.map(c => compressImage(c.url, 800, 0.7))
       );
       const compressedAvatar = await compressImage(dressMeImages.avatar, 600, 0.6);
       
       const cleanClothes = compressedClothes.map(c => c.split(',')[1]);
       const cleanAvatar = compressedAvatar.split(',')[1];
       
-      const outfit = await processQuickDress(cleanClothes, cleanAvatar, userRequest);
+      // Build descriptions for simulation quality - including full metadata
+      const descriptions = dressMeImages.clothes
+        .map(c => {
+          const m = c.metadata;
+          return `- ${m.name || 'Ensemble piece'} (${m.category || 'Apparel'}): ${m.description || 'A stylish boutique garment'} in ${m.primaryColor || 'original color'}. Texture: ${m.materialLook || 'Fine fabric'}. Pattern: ${m.pattern || 'Solid'}.`;
+        })
+        .join('\n');
+
+      const outfit = await processQuickDress(cleanClothes, cleanAvatar, descriptions, userRequest);
       setResultImage(outfit);
     } catch (e: any) {
       console.error(e);
@@ -196,7 +313,10 @@ const ExploreView: React.FC<ExploreViewProps> = ({ lang = 'en', profile }) => {
     }
   };
 
-  const activeCategoryData = BEAUTY_CATEGORIES.find(c => c.id === activeCategory) || BEAUTY_CATEGORIES[0];
+  const filteredWardrobe = items.filter(item => 
+    item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    item.category.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
     <div className="flex flex-col space-y-12 py-6 px-6 pb-24 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -312,8 +432,8 @@ const ExploreView: React.FC<ExploreViewProps> = ({ lang = 'en', profile }) => {
                     </div>
                   </div>
                   <div className="flex flex-col space-y-3">
-                    <button onClick={() => { const link = document.createElement('a'); link.href = resultImage!; link.download = `GlamLab-Vogue-${Date.now()}.png`; link.click(); }} className="w-full py-5 bg-[#26A69A] text-white font-black uppercase tracking-widest text-[11px] rounded-[24px] shadow-lg active:scale-95 transition-all flex items-center justify-center space-x-3">
-                      <CheckCircle2 className="w-4 h-4" />
+                    <button onClick={handleDownload} className="w-full py-5 bg-[#26A69A] text-white font-black uppercase tracking-widest text-[11px] rounded-[24px] shadow-lg active:scale-95 transition-all flex items-center justify-center space-x-3">
+                      <Download className="w-4 h-4" />
                       <span>Archive High-Res</span>
                     </button>
                     <button onClick={() => setResultImage(null)} className="w-full py-4 text-gray-400 font-black uppercase tracking-widest text-[10px] hover:text-[#26A69A] transition-colors">Discard & Retake</button>
@@ -381,17 +501,54 @@ const ExploreView: React.FC<ExploreViewProps> = ({ lang = 'en', profile }) => {
                            <span className="text-[8px] font-black text-[#26A69A] uppercase tracking-widest">Replacement Source</span>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
-                          {dressMeImages.clothes.map((img, i) => (
-                            <div key={i} className="aspect-square rounded-2xl overflow-hidden relative group border border-gray-100">
-                              <img src={img} className="w-full h-full object-cover" />
+                          {dressMeImages.clothes.map((item, i) => (
+                            <div key={i} className="aspect-square rounded-2xl overflow-hidden relative group border border-gray-100 bg-gray-50">
+                              <img src={item.url} className={`w-full h-full object-cover ${item.isAnalyzing ? 'opacity-30' : 'opacity-100'}`} />
+                              {item.isAnalyzing && (
+                                <div className="absolute inset-0 flex items-center justify-center">
+                                  <Loader2 className="w-6 h-6 animate-spin text-[#26A69A]" />
+                                </div>
+                              )}
+                              {!item.isAnalyzing && (
+                                <div className="absolute bottom-2 left-2 right-2">
+                                  <span className="px-2 py-1 bg-black/60 backdrop-blur-md text-white text-[7px] font-black uppercase tracking-widest rounded-lg truncate block">
+                                    {item.metadata.name || 'Analyzed Piece'}
+                                  </span>
+                                </div>
+                              )}
                               <button onClick={(e) => { e.stopPropagation(); removeClothingItem(i); }} className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 className="w-3 h-3" /></button>
                             </div>
                           ))}
                           {dressMeImages.clothes.length < 4 && (
-                            <button onClick={() => clothingInputRef.current?.click()} className="aspect-square rounded-2xl border-2 border-dashed border-gray-100 flex flex-col items-center justify-center hover:border-[#26A69A]/40 transition-all text-gray-300">
-                              <Plus className="w-6 h-6 mb-1" />
-                              <span className="text-[8px] font-black uppercase tracking-tighter">Add Item</span>
-                            </button>
+                            <div className="relative">
+                              <button 
+                                disabled={isCleaningClothing}
+                                onClick={() => setShowAddMenu(!showAddMenu)} 
+                                className="w-full aspect-square rounded-2xl border-2 border-dashed border-gray-100 flex flex-col items-center justify-center hover:border-[#26A69A]/40 transition-all text-gray-300 disabled:opacity-50"
+                              >
+                                {isCleaningClothing ? (
+                                  <Loader2 className="w-6 h-6 animate-spin text-[#26A69A]" />
+                                ) : (
+                                  <>
+                                    <Plus className="w-6 h-6 mb-1" />
+                                    <span className="text-[8px] font-black uppercase tracking-tighter">Add Item</span>
+                                  </>
+                                )}
+                              </button>
+                              
+                              {showAddMenu && !isCleaningClothing && (
+                                <div className="absolute top-full mt-2 left-0 right-0 z-[220] bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden animate-in fade-in slide-in-from-top-2">
+                                  <button onClick={() => setShowWardrobePicker(true)} className="w-full px-4 py-3 text-[9px] font-black uppercase tracking-widest text-[#26A69A] hover:bg-teal-50 flex items-center space-x-2 border-b border-gray-50">
+                                    <Grid className="w-3 h-3" />
+                                    <span>My Boutique</span>
+                                  </button>
+                                  <button onClick={() => clothingInputRef.current?.click()} className="w-full px-4 py-3 text-[9px] font-black uppercase tracking-widest text-zinc-600 hover:bg-gray-50 flex items-center space-x-2">
+                                    <Upload className="w-3 h-3" />
+                                    <span>From Gallery</span>
+                                  </button>
+                                </div>
+                              )}
+                            </div>
                           )}
                         </div>
                       </div>
@@ -399,7 +556,7 @@ const ExploreView: React.FC<ExploreViewProps> = ({ lang = 'en', profile }) => {
                         <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center"><PenTool className="w-3 h-3 mr-2" />Styling Requests</p>
                         <textarea value={userRequest} onChange={(e) => setUserRequest(e.target.value)} placeholder="e.g. 'Paris street style', 'Golden hour glow'..." className="w-full bg-gray-50 border border-gray-100 rounded-3xl p-5 text-xs font-bold text-gray-900 outline-none focus:ring-2 focus:ring-[#26A69A]/10 transition-all resize-none h-20 placeholder:text-gray-300" />
                       </div>
-                      <button onClick={handleDressMeSimulation} disabled={!dressMeImages.avatar || dressMeImages.clothes.length === 0} className="w-full py-5 bg-[#26A69A] text-white font-black uppercase tracking-widest text-[11px] rounded-[28px] shadow-xl disabled:opacity-20 active:scale-95 transition-all flex items-center justify-center space-x-3">
+                      <button onClick={handleDressMeSimulation} disabled={!dressMeImages.avatar || dressMeImages.clothes.length === 0 || isCleaningClothing || dressMeImages.clothes.some(c => c.isAnalyzing)} className="w-full py-5 bg-[#26A69A] text-white font-black uppercase tracking-widest text-[11px] rounded-[28px] shadow-xl disabled:opacity-20 active:scale-95 transition-all flex items-center justify-center space-x-3">
                         <Sparkles className="w-4 h-4" />
                         <span>Perform Vogue Simulation</span>
                       </button>
@@ -409,6 +566,62 @@ const ExploreView: React.FC<ExploreViewProps> = ({ lang = 'en', profile }) => {
               )}
             </div>
           </div>
+          
+          {/* Wardrobe Picker Overlay */}
+          {showWardrobePicker && (
+            <div className="absolute inset-0 z-[230] bg-white flex flex-col animate-in slide-in-from-bottom-full duration-500">
+              <div className="p-8 flex items-center justify-between border-b border-gray-50 bg-white sticky top-0">
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900 tracking-tight">Select Item</h2>
+                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-0.5">Boutique Archive</p>
+                </div>
+                <button onClick={() => setShowWardrobePicker(false)} className="p-2 hover:bg-gray-100 rounded-2xl transition-all">
+                  <X className="w-6 h-6 text-gray-400" />
+                </button>
+              </div>
+              
+              <div className="px-8 py-4 bg-gray-50 border-b border-gray-100">
+                <div className="relative">
+                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" />
+                  <input 
+                    type="text" 
+                    placeholder="Search boutique..." 
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-12 pr-4 py-3 bg-white border border-gray-100 rounded-2xl text-[11px] font-bold outline-none focus:ring-2 focus:ring-[#26A69A]/10"
+                  />
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
+                {items.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-full text-center space-y-4">
+                    <Shirt className="w-12 h-12 text-gray-200" />
+                    <p className="text-[11px] font-black uppercase text-gray-400 tracking-widest">Boutique Archive Empty</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-4">
+                    {filteredWardrobe.map(item => (
+                      <button 
+                        key={item.id} 
+                        onClick={() => handleWardrobeItemPick(item)}
+                        className="group flex flex-col text-left space-y-3 p-3 bg-gray-50 rounded-3xl border border-transparent hover:border-[#26A69A]/30 transition-all hover:bg-white hover:shadow-lg"
+                      >
+                        <div className="aspect-[3/4] rounded-2xl overflow-hidden bg-white shadow-sm">
+                          <img src={item.imageUrl} className="w-full h-full object-cover transition-transform group-hover:scale-110" />
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-black text-gray-900 truncate uppercase tracking-tight">{item.name}</p>
+                          <p className="text-[8px] text-gray-400 font-black uppercase tracking-widest">{item.category}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           <input type="file" ref={fileInputRef} onChange={handleAvatarSelect} className="hidden" accept="image/*" />
           <input type="file" ref={clothingInputRef} onChange={handleClothingSelect} className="hidden" accept="image/*" multiple />
           <input type="file" ref={restoreInputRef} onChange={onRestoreFileSelect} className="hidden" accept="image/*" />

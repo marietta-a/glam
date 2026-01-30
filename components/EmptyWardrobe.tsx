@@ -22,14 +22,6 @@ const EmptyWardrobe: React.FC<EmptyWardrobeProps> = ({ onAdd, lang = 'en' }) => 
           <div className="w-24 h-2 bg-gray-100 rounded-full mb-2" />
           <div className="w-16 h-2 bg-gray-50 rounded-full" />
         </div>
-        
-        {/* Staggered accent cards */}
-        <div className="absolute top-4 left-8 right-[-10px] bottom-[-10px] bg-[#26A69A]/5 rounded-[48px] z-10 transform rotate-[4deg]" />
-        
-        {/* Floating AI badge */}
-        {/* <div className="absolute -top-6 right-[-15px] z-30 bg-white p-4 rounded-3xl shadow-xl border border-gray-50 animate-bounce duration-[4000ms]">
-          <Wand2 className="w-6 h-6 text-[#26A69A]" />
-        </div> */}
       </div>
 
       {/* Content Section */}
