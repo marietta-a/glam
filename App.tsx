@@ -54,6 +54,7 @@ import SyncingWardrobe from './components/SyncingWardrobe';
 import Paywall from './components/Paywall';
 import AdBanner from './components/AdBanner';
 import UpdatePrompt from './components/UpdatePrompt';
+import NetworkErrorModal from './components/NetworkErrorModal';
 import { t } from './services/i18n';
 
 // Restrict to sequential processing for archival integrity during credit updates
@@ -163,12 +164,57 @@ const App: React.FC = () => {
   const [isPaywallOpen, setIsPaywallOpen] = useState(false);
   const [showUploadTooltip, setShowUploadTooltip] = useState(false);
   const [suggestedOutfits, setSuggestedOutfits] = useState<OutfitSuggestion[]>([]);
+  const [isOffline, setIsOffline] = useState(!navigator.onLine);
   const [generationMetadata, setGenerationMetadata] = useState<Record<string, { countAtGeneration: number }>>(() => {
     const saved = localStorage.getItem('glam_gen_metadata');
     return saved ? JSON.parse(saved) : {};
   });
 
   const mainScrollRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    // Network Middleware Logic
+    const handleStatusChange = () => {
+      setIsOffline(!navigator.onLine);
+    };
+
+    window.addEventListener('online', handleStatusChange);
+    window.addEventListener('offline', handleStatusChange);
+
+    const originalFetch = window.fetch;
+    
+    // Fix: Wrap fetch override in try/catch to handle read-only environments
+    try {
+        window.fetch = async (...args) => {
+          if (!navigator.onLine) {
+            setIsOffline(true);
+            return Promise.reject(new TypeError('OFFLINE_MODE'));
+          }
+          
+          try {
+            const response = await originalFetch(...args);
+            return response;
+          } catch (error) {
+            if (!navigator.onLine) {
+               setIsOffline(true);
+            }
+            throw error;
+          }
+        };
+    } catch (e) {
+        console.warn("Could not patch window.fetch, falling back to event listeners only.", e);
+    }
+
+    return () => {
+      window.removeEventListener('online', handleStatusChange);
+      window.removeEventListener('offline', handleStatusChange);
+      try {
+          window.fetch = originalFetch;
+      } catch (e) {
+          // ignore cleanup errors for fetch
+      }
+    };
+  }, []);
 
   useEffect(() => {
     localStorage.setItem('glam_gen_metadata', JSON.stringify(generationMetadata));
@@ -565,6 +611,8 @@ const App: React.FC = () => {
       <AddItemModal isOpen={isAddItemOpen} onClose={() => setIsAddItemOpen(false)} onStartUpload={handleStartUpload} lang={lang} />
       {selectedItem && <ItemDetailsModal item={selectedItem} userId={user.id} isOpen={!!selectedItem} onClose={() => setSelectedItem(null)} onSave={(u) => { setItems(prev => prev.map(i => i.id === u.id ? u : i)); setSelectedItem(u); }} onDelete={(id) => { setItems(prev => prev.filter(i => i.id !== id)); }} lang={lang} />}
       {isPaywallOpen && <Paywall isOpen={isPaywallOpen} onClose={() => setIsPaywallOpen(false)} onSubscribe={handleSubscribe} lang={lang} totalGenerations={profile?.total_generations} />}
+
+      <NetworkErrorModal isOpen={isOffline} onRetry={() => { if(navigator.onLine) setIsOffline(false); }} lang={lang} />
 
       {showSuitabilityModal && (
         <div className="fixed inset-0 z-[500] flex items-center justify-center p-8 bg-black/80 backdrop-blur-xl animate-in fade-in">
