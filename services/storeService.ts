@@ -1,5 +1,5 @@
-
-import { WardrobeItem, OutfitCache, UserProfile } from '../types';
+// store.ts
+import { WardrobeItem, OutfitCache, UserProfile, SuggestionCache } from '../types';
 
 /**
  * Global Boutique Store
@@ -9,7 +9,15 @@ class BoutiqueStore {
   private static instance: BoutiqueStore;
   
   public items: WardrobeItem[] = [];
+  
+  // Stores the FINAL visualized result for each occasion
   public outfitCache: OutfitCache = {};
+
+  public avatarUpdated: boolean = false;
+  
+  // Stores the list of text suggestions for each occasion
+  public suggestionCache: SuggestionCache = {};
+  
   public profile: UserProfile | null = null;
   public isHydrated: boolean = false;
 
@@ -34,6 +42,10 @@ class BoutiqueStore {
     this.outfitCache = newCache;
   }
 
+  public updateSuggestions(newSuggestions: SuggestionCache) {
+    this.suggestionCache = newSuggestions;
+  }
+
   public updateProfile(newProfile: UserProfile | null) {
     this.profile = newProfile;
   }
@@ -41,6 +53,7 @@ class BoutiqueStore {
   public clear() {
     this.items = [];
     this.outfitCache = {};
+    this.suggestionCache = {};
     this.profile = null;
     this.isHydrated = false;
   }

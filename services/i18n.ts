@@ -11,7 +11,7 @@ export const LANGUAGES: { code: LanguageCode; name: string }[] = [
 const translations: Record<LanguageCode, Record<string, string>> = {
   en: {
     wardrobe: 'Wardrobe',
-    discovery: 'Discovery',
+    discovery: 'Editorial',
     stylist: 'Stylist',
     all_items: 'All Items',
     add_piece: 'Add Piece',
@@ -91,6 +91,11 @@ const translations: Record<LanguageCode, Record<string, string>> = {
     the_lab_desc: 'Use DressMe for quick combinations or Restore to enhance low-quality outfit photos.',
     vogue_protocol_title: 'Vogue Protocol',
     vogue_protocol_desc: 'Our AI automatically renders occasion-specific backgrounds based on your Style Objective.',
+    update_available: 'System Upgrade Available',
+    update_desc: 'A new boutique protocol is available. Install the latest version to access enhanced features.',
+    update_now: 'Upgrade Archive',
+    remind_later: 'Remind Later',
+    version: 'Version',
   },
   es: {
     wardrobe: 'Armario',
@@ -174,6 +179,11 @@ const translations: Record<LanguageCode, Record<string, string>> = {
     the_lab_desc: 'Usa Vísteme para combinaciones rápidas o Restaurar para mejorar fotos de baja calidad.',
     vogue_protocol_title: 'Protocolo Vogue',
     vogue_protocol_desc: 'Nuestra IA genera fondos específicos según tu Objetivo de Estilo.',
+    update_available: 'Actualización del Sistema',
+    update_desc: 'Nuevo protocolo boutique disponible. Instala la última versión para funciones mejoradas.',
+    update_now: 'Actualizar Archivo',
+    remind_later: 'Más Tarde',
+    version: 'Versión',
   },
   fr: {
     wardrobe: 'Garde-robe',
@@ -257,6 +267,11 @@ const translations: Record<LanguageCode, Record<string, string>> = {
     the_lab_desc: 'Utilisez HabilleMoi pour des combos rapides ou Restauration pour vos photos.',
     vogue_protocol_title: 'Protocole Vogue',
     vogue_protocol_desc: 'Notre IA génère des arrière-plans selon votre Objectif de Style.',
+    update_available: 'Mise à jour Système',
+    update_desc: 'Nouveau protocole boutique disponible. Installez la dernière version.',
+    update_now: 'Mettre à Jour',
+    remind_later: 'Plus Tard',
+    version: 'Version',
   },
   ja: {
     wardrobe: 'ワードローブ',
@@ -340,6 +355,11 @@ const translations: Record<LanguageCode, Record<string, string>> = {
     the_lab_desc: 'ドレスミーで素早い組み合わせを、修復ツールで写真のクオリティ向上を。',
     vogue_protocol_title: 'Vogueプロトコル',
     vogue_protocol_desc: 'スタイル目的に応じて、AIが自動的に最適な背景を生成します。',
+    update_available: 'システムアップグレード',
+    update_desc: '新しいブティックプロトコルが利用可能です。最新バージョンをインストールしてください。',
+    update_now: 'アーカイブを更新',
+    remind_later: '後で',
+    version: 'バージョン',
   },
 };
 
