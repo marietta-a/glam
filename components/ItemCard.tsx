@@ -25,9 +25,9 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, onClick }) => {
             <Heart className="w-3.5 h-3.5 fill-current" />
           </div>
         )}
-        {/* Archival ID Overlay */}
+        {/* Fixed: Archival ID Overlay - using item.id as archivalId does not exist on WardrobeItem */}
         <div className="absolute bottom-2 left-2 px-2 py-0.5 bg-black/40 backdrop-blur-md rounded-lg z-10 opacity-0 group-hover:opacity-100 transition-opacity">
-          <p className="text-[7px] font-black text-white uppercase tracking-widest">{item.archivalId}</p>
+          <p className="text-[7px] font-black text-white uppercase tracking-widest">{item.id}</p>
         </div>
       </div>
       <div className="mt-4 px-1 flex justify-between items-start">

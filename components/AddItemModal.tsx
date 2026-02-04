@@ -1,5 +1,6 @@
+
 import React, { useState, useRef } from 'react';
-import { X, Upload, Globe, AlertCircle, Sparkles, Download, Loader2 } from 'lucide-react';
+import { X, Upload, Globe, AlertCircle, Sparkles, Download, Loader2, Info } from 'lucide-react';
 import { t } from '../services/i18n';
 import { getBase64Data } from '../services/geminiService';
 
@@ -55,7 +56,6 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, onStartUpl
 
     try {
       // Pre-check the URL for CORS issues before closing the modal
-      // This preserves the user's state (the URL input) if it fails
       await getBase64Data(imageUrl);
       
       const urlToUpload = imageUrl;
@@ -64,7 +64,7 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, onStartUpl
       onClose();
     } catch (err: any) {
       console.error("URL Verification Error:", err);
-      if (err.message === "CORS_OR_NETWORK_ERROR" || err.message.includes("FETCH")) {
+      if (err.message === "CORS_OR_NETWORK_ERROR" || err.message.includes("FETCH") || err.message.includes("UNABLE_TO_FETCH")) {
         setCorsError(true);
       } else {
         setError(err.message || "Archive sync error");
@@ -116,7 +116,7 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, onStartUpl
                 <p className="text-gray-400 text-[10px] leading-relaxed uppercase tracking-widest font-black">{t('ai_background', lang)}</p>
               </div>
             ) : (
-              <form onSubmit={handleUrlSubmit} className="space-y-4 py-2">
+              <form onSubmit={handleUrlSubmit} className="space-y-5 py-2">
                 <div className="relative">
                   <Globe className={`absolute left-6 top-1/2 -translate-y-1/2 w-5 h-5 transition-colors ${isVerifying ? 'text-[#26A69A] animate-pulse' : 'text-gray-300'}`} />
                   <input 
@@ -129,6 +129,15 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, onStartUpl
                     required 
                   />
                 </div>
+
+                {!corsError && !isVerifying && (
+                  <div className="flex items-start space-x-3 px-4 py-3 bg-blue-50/50 rounded-2xl border border-blue-100/30 animate-in fade-in duration-700">
+                    <Info className="w-4 h-4 text-blue-400 mt-0.5 flex-shrink-0" />
+                    <p className="text-[10px] text-blue-600/70 font-bold leading-relaxed uppercase tracking-wide">
+                      Pro Tip: Some sites block direct sync. If a link fails, download the image and use your gallery for instant results.
+                    </p>
+                  </div>
+                )}
                 
                 {corsError && (
                   <div className="bg-red-50 p-6 rounded-[32px] border border-red-100 flex flex-col items-center text-center animate-in slide-in-from-top-4 duration-500">
@@ -161,7 +170,7 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, onStartUpl
               </form>
             )}
 
-            {!corsError && (
+            {!corsError && !isVerifying && (
               <div className="bg-teal-50/50 p-6 rounded-[32px] border border-teal-50 flex items-start space-x-4">
                 <Sparkles className="w-5 h-5 text-[#26A69A] flex-shrink-0 mt-1" />
                 <p className="text-[11px] text-[#26A69A] font-bold leading-relaxed">
@@ -170,7 +179,7 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, onStartUpl
               </div>
             )}
 
-            {error && (
+            {error && !corsError && (
               <div className="p-4 bg-red-50 rounded-[20px] flex items-center space-x-3 text-red-500">
                 <AlertCircle className="w-4 h-4" />
                 <span className="text-[10px] font-bold uppercase tracking-widest">{error}</span>

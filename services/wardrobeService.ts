@@ -1,10 +1,8 @@
-
 import { supabase } from '../lib/supabase';
-import { WardrobeItem, UserProfile, CachedOutfit, Outfit, Occasion } from '../types';
+import { WardrobeItem, UserProfile, CachedOutfit, Occasion, OutfitSuggestion, Outfit } from '../types';
+import {store} from '../services/storeService';
+// --- IMAGE UTILS ---
 
-/**
- * Compresses a base64 image using canvas to reduce storage size.
- */
 export const compressImage = async (base64: string, maxWidth = 1200, quality = 0.7): Promise<string> => {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -32,101 +30,9 @@ export const compressImage = async (base64: string, maxWidth = 1200, quality = 0
   });
 };
 
-export const fetchWardrobeItemsBatch = async (userId: string, limit: number, offset: number): Promise<WardrobeItem[]> => {
-  const { data, error } = await supabase
-    .from('wardrobe_items')
-    .select('*')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false })
-    .range(offset, offset + limit - 1);
-
-  if (error) throw error;
-
-  return (data || []).map(item => ({
-    id: item.item_id,
-    userId: item.user_id,
-    name: item.name,
-    category: item.category,
-    subCategory: item.sub_category,
-    primaryColor: item.primary_color,
-    secondaryColors: item.secondary_colors,
-    pattern: item.pattern,
-    materialLook: item.material_look,
-    seasonality: item.seasonality,
-    formality: item.formality,
-    warmthLevel: item.warmth_level,
-    fitsWithColors: item.fits_with_colors,
-    occasionSuitability: item.occasion_suitability,
-    tags: item.tags,
-    imageUrl: item.image_url,
-    description: item.description,
-    price: item.price,
-    isFavorite: item.is_favorite,
-    createdAt: item.created_at
-  }));
-};
-
-export const getWardrobeCount = async (userId: string): Promise<number> => {
-  const { count, error } = await supabase
-    .from('wardrobe_items')
-    .select('*', { count: 'exact', head: true })
-    .eq('user_id', userId);
-  
-  if (error) throw error;
-  return count || 0;
-};
-
-export const fetchUserProfile = async (userId: string): Promise<UserProfile | null> => {
-  const { data, error } = await supabase
-    .from('user_profile')
-    .select('*')
-    .eq('id', userId)
-    .maybeSingle();
-
-  if (error) {
-    console.error("Fetch profile error:", error);
-    return null;
-  }
-  
-  // Persist avatar locally for personalization
-  if (data?.avatar_url) {
-    localStorage.setItem('glam_last_avatar', data.avatar_url);
-  }
-  
-  return data;
-};
-
-export const updateUserProfile = async (profile: Partial<UserProfile>): Promise<void> => {
-  if (profile.avatar_url) {
-    localStorage.setItem('glam_last_avatar', profile.avatar_url);
-  }
-
-  const { error } = await supabase
-    .from('user_profile')
-    .update({ ...profile, updated_at: new Date().toISOString() })
-    .eq('id', profile.id);
-
-  if (error) throw error;
-};
-
-export const createUserProfile = async (profile: Partial<UserProfile>): Promise<void> => {
-  const { error } = await supabase
-    .from('user_profile')
-    .insert([{ ...profile, credits: 0, total_generations: 0 }]);
-
-  if (error) throw error;
-};
-
-export const logoutUser = async (): Promise<void> => {
-  localStorage.removeItem('glam_outfits_cache');
-  localStorage.removeItem('glam_active_view');
-  localStorage.removeItem('glam_active_tab');
-  const { error } = await (supabase.auth as any).signOut();
-  if (error) throw error;
-};
-
-
 export const uploadWardrobeImage = async (userId: string, itemId: string, base64Image: string): Promise<string> => {
+  if (base64Image.startsWith('http')) return base64Image;
+
   const compressedBase64 = await compressImage(base64Image);
   const base64Content = compressedBase64.split(';base64,').pop()!;
   
@@ -153,24 +59,69 @@ export const uploadWardrobeImage = async (userId: string, itemId: string, base64
   return signedUrl;
 };
 
+// --- WARDROBE ITEMS ---
+
+export const getWardrobeCount = async (userId: string): Promise<number> => {
+  const { count, error } = await supabase
+    .from('wardrobe_items')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', userId);
+  
+  if (error) throw error;
+  return count || 0;
+};
+
+export const fetchWardrobeItemsBatch = async (userId: string, limit: number, offset: number): Promise<WardrobeItem[]> => {
+  const { data, error } = await supabase
+    .from('wardrobe_items')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .range(offset, offset + limit - 1);
+
+  if (error) throw error;
+
+  return (data || []).map(item => ({
+    id: item.item_id,
+    userId: item.user_id,
+    name: item.name,
+    category: item.category,
+    subCategory: item.sub_category,
+    // Corrected to camelCase as per WardrobeItem interface
+    primaryColor: item.primary_color,
+    secondaryColors: item.secondary_colors,
+    pattern: item.pattern,
+    materialLook: item.material_look,
+    seasonality: item.seasonality,
+    formality: item.formality,
+    warmthLevel: item.warmth_level,
+    fitsWithColors: item.fits_with_colors,
+    occasionSuitability: item.occasion_suitability,
+    tags: item.tags,
+    imageUrl: item.image_url,
+    description: item.description,
+    price: item.price,
+    isFavorite: item.is_favorite,
+    createdAt: item.created_at
+  }));
+};
+
 export const saveWardrobeItem = async (item: Partial<WardrobeItem>): Promise<WardrobeItem> => {
   const dbItem = {
     user_id: item.userId,
     name: item.name,
     category: item.category,
     sub_category: item.subCategory,
-    // Use camelCase property primaryColor instead of primary_color
     primary_color: item.primaryColor,
-    // Use camelCase property secondaryColors instead of secondary_colors
     secondary_colors: item.secondaryColors,
     pattern: item.pattern,
+    // Corrected item.material_look to item.materialLook (camelCase)
     material_look: item.materialLook,
     seasonality: item.seasonality,
     formality: item.formality,
+    // Corrected item.warmth_level to item.warmthLevel (camelCase)
     warmth_level: item.warmthLevel,
-    // Fix: Use camelCase fitsWithColors
     fits_with_colors: item.fitsWithColors,
-    // Fix: Use camelCase occasionSuitability
     occasion_suitability: item.occasionSuitability,
     tags: item.tags,
     image_url: item.imageUrl,
@@ -187,11 +138,7 @@ export const saveWardrobeItem = async (item: Partial<WardrobeItem>): Promise<War
 
   if (error) throw error;
 
-  return {
-    ...item,
-    id: data.item_id,
-    createdAt: data.created_at
-  } as WardrobeItem;
+  return { ...item, id: data.item_id, createdAt: data.created_at } as WardrobeItem;
 };
 
 export const updateWardrobeItem = async (item: WardrobeItem): Promise<void> => {
@@ -200,27 +147,18 @@ export const updateWardrobeItem = async (item: WardrobeItem): Promise<void> => {
     .update({
       name: item.name,
       category: item.category,
-      sub_category: item.subCategory,
-      // Use camelCase property primaryColor instead of primary_color
-      primary_color: item.primaryColor,
-      // Use camelCase property secondaryColors instead of secondary_colors
-      secondary_colors: item.secondaryColors,
-      pattern: item.pattern,
-      material_look: item.materialLook,
-      seasonality: item.seasonality,
-      formality: item.formality,
-      warmth_level: item.warmthLevel,
-      // Fix: Use camelCase fitsWithColors
-      fits_with_colors: item.fitsWithColors,
-      // Fix: Use camelCase occasionSuitability
-      occasion_suitability: item.occasionSuitability,
-      tags: item.tags,
+      is_favorite: item.isFavorite,
       description: item.description,
-      price: item.price,
-      is_favorite: item.isFavorite
+      primary_color: item.primaryColor,
+      // Corrected item.material_look to item.materialLook (camelCase)
+      material_look: item.materialLook,
+      pattern: item.pattern,
+      // Corrected item.warmth_level to item.warmthLevel (camelCase)
+      warmth_level: item.warmthLevel,
+      occasion_suitability: item.occasionSuitability
     })
     .eq('item_id', item.id);
-
+  
   if (error) throw error;
 };
 
@@ -233,15 +171,196 @@ export const deleteWardrobeItem = async (userId: string, itemId: string): Promis
   if (dbError) throw dbError;
 
   const filePath = `${userId}/${itemId}.jpg`;
-  await supabase.storage
-    .from('glamorous')
-    .remove([filePath]);
+  await supabase.storage.from('glamorous').remove([filePath]);
 };
+
+// --- USER PROFILE ---
+
+export const fetchUserProfile = async (userId: string): Promise<UserProfile | null> => {
+  const { data, error } = await supabase
+    .from('user_profile')
+    .select('*')
+    .eq('id', userId)
+    .maybeSingle();
+
+  if (error) {
+    console.error("Fetch profile error:", error);
+    return null;
+  }
+  
+  if (data?.avatar_url) localStorage.setItem('glam_last_avatar', data.avatar_url);
+  return data;
+};
+
+export const createUserProfile = async (profile: Partial<UserProfile>): Promise<void> => {
+  const { error } = await supabase
+    .from('user_profile')
+    .insert([profile]);
+  if (error) throw error;
+};
+
+export const updateUserProfile = async (profile: Partial<UserProfile>): Promise<void> => {
+  if (profile.avatar_url) localStorage.setItem('glam_last_avatar', profile.avatar_url);
+  const { error } = await supabase
+    .from('user_profile')
+    .update({ ...profile, updated_at: new Date().toISOString() })
+    .eq('id', profile.id);
+  if (error) throw error;
+  store.avatarUpdated = true;
+};
+
+export const logoutUser = async (): Promise<void> => {
+  const { error } = await supabase.auth.signOut();
+  if (error) throw error;
+  localStorage.removeItem('glam_last_avatar');
+};
+
+// --- OUTFIT SUGGESTIONS (STEP 1: TEXT GENERATION) ---
+
+export const fetchAllOutfitSuggestions = async (
+  userId: string,
+  allWardrobeItems: WardrobeItem[]
+): Promise<Record<string, OutfitSuggestion[]>> => {
+  const now = new Date().toISOString();
+  const { data, error } = await supabase
+    .from('outfit_suggestions')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('is_rejected', false)
+    .gt('expires_at', now);
+
+  if (error) {
+    console.error("Fetch all suggestions error:", error);
+    return {};
+  }
+
+  const cache: Record<string, OutfitSuggestion[]> = {};
+  (data || []).forEach(row => {
+    const items = (row.wardrobe_item_ids || [])
+      .map((id: string) => allWardrobeItems.find(i => i.id === id))
+      .filter(Boolean) as WardrobeItem[];
+
+    if (!cache[row.occasion]) cache[row.occasion] = [];
+    cache[row.occasion].push({
+      id: row.suggestion_id,
+      name: row.outfit_name,
+      stylistNotes: row.stylist_notes,
+      occasion: row.occasion as Occasion,
+      items: items
+    });
+  });
+
+  return cache;
+};
+
+export const fetchOutfitSuggestions = async (
+  userId: string, 
+  occasion: string,
+  allWardrobeItems: WardrobeItem[]
+): Promise<OutfitSuggestion[]> => {
+  const now = new Date().toISOString();
+  
+  const { data, error } = await supabase
+    .from('outfit_suggestions')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('occasion', occasion)
+    .eq('is_rejected', false)
+    .gt('expires_at', now);
+
+  if (error) {
+    console.error("Fetch suggestions error:", error);
+    return [];
+  }
+
+  return (data || []).map(row => {
+    const items = (row.wardrobe_item_ids || [])
+      .map((id: string) => allWardrobeItems.find(i => i.id === id))
+      .filter(Boolean) as WardrobeItem[];
+
+    return {
+      id: row.suggestion_id,
+      name: row.outfit_name,
+      stylistNotes: row.stylist_notes,
+      occasion: row.occasion as Occasion,
+      items: items
+    };
+  });
+};
+
+export const deleteOutfitSuggestion = async (userId: string, suggestionId: string): Promise<void> => {
+  const { error } = await supabase
+    .from('outfit_suggestions')
+    .delete()
+    .eq('user_id', userId)
+    .eq('suggestion_id', suggestionId);
+  
+  if (error) throw error;
+};
+
+export const saveOutfitSuggestions = async (
+  userId: string, 
+  occasion: string, 
+  suggestions: Omit<Outfit, 'id'>[],
+  allWardrobeItems: WardrobeItem[]
+): Promise<OutfitSuggestion[]> => {
+  // 1. Identify existing suggestions for this user & occasion
+  const { data: existingSuggestions } = await supabase
+    .from('outfit_suggestions')
+    .select('suggestion_id')
+    .eq('user_id', userId)
+    .eq('occasion', occasion);
+
+  if (existingSuggestions && existingSuggestions.length > 0) {
+    const existingIds = existingSuggestions.map(s => s.suggestion_id);
+
+    // 2. Determine which suggestions have been visualized (cached)
+    // We only want to keep the visualized ones.
+    const { data: visualized } = await supabase
+      .from('visualized_outfits')
+      .select('suggestion_id')
+      .in('suggestion_id', existingIds);
+
+    const visualizedIds = new Set(visualized?.map(v => v.suggestion_id) || []);
+
+    // 3. Delete non-visualized suggestions to clear clutter before adding new ones
+    const idsToDelete = existingIds.filter(id => !visualizedIds.has(id));
+
+    if (idsToDelete.length > 0) {
+      await supabase
+        .from('outfit_suggestions')
+        .delete()
+        .in('suggestion_id', idsToDelete);
+    }
+  }
+
+  // 4. Insert new suggestions
+  const dbRows = suggestions.map(s => ({
+    user_id: userId,
+    occasion: occasion,
+    outfit_name: s.name,
+    stylist_notes: s.stylistNotes,
+    wardrobe_item_ids: s.items.map(i => i.id),
+    expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+  }));
+
+  const { error } = await supabase
+    .from('outfit_suggestions')
+    .insert(dbRows);
+
+  if (error) throw error;
+
+  // 5. Fetch and return the COMPLETE updated list (Preserved Visualized + New)
+  // We perform a fresh fetch to ensure UI is 100% in sync with DB state
+  return await fetchOutfitSuggestions(userId, occasion, allWardrobeItems);
+};
+
+// --- OUTFIT VISUALIZATION CACHE (STEP 2: IMAGE GENERATION) ---
 
 export const fetchOutfitCache = async (userId: string, wardrobeItems: WardrobeItem[]): Promise<Record<string, CachedOutfit>> => {
   const now = new Date().toISOString();
   const { data, error } = await supabase
-    .from('outfit_cache')
+    .from('visualized_outfits')
     .select('*')
     .eq('user_id', userId)
     .gt('expires_at', now);
@@ -259,9 +378,10 @@ export const fetchOutfitCache = async (userId: string, wardrobeItems: WardrobeIt
       .filter(Boolean) as WardrobeItem[];
 
     if (items.length > 0) {
-      cache[row.occasion] = {
+      cache[row.suggestion_id] = {
+        id: row.suggestion_id,
         outfit: {
-          id: row.outfit_id,
+          id: row.suggestion_id,
           name: row.outfit_name,
           items: items,
           stylistNotes: row.stylist_notes,
@@ -269,10 +389,7 @@ export const fetchOutfitCache = async (userId: string, wardrobeItems: WardrobeIt
         },
         visualizedImage: row.visualized_image_url,
         generatedAt: new Date(row.generated_at).getTime(),
-        combinationHistory: row.history || [], 
-        pastOutfits: [],
-        pastImages: [],
-        isRecycled: false
+        combinationHistory: row.history || []
       };
     }
   });
@@ -280,121 +397,175 @@ export const fetchOutfitCache = async (userId: string, wardrobeItems: WardrobeIt
   return cache;
 };
 
-export const saveOutfitToCache = async (userId: string, occasion: string, cachedOutfit: CachedOutfit): Promise<void> => {
-  const { outfit, visualizedImage, combinationHistory, generatedAt } = cachedOutfit;
-  
-  const wardrobeItemIds = outfit.items.map(i => i.id);
+export const saveOutfitToCache = async (userId: string, occasion: string, cacheItem: CachedOutfit): Promise<void> => {
+  const suggestionId = cacheItem.outfit.id;
 
-  const signedUrl = visualizedImage ? await uploadWardrobeImage(userId, occasion, visualizedImage) : null;
-  
   await supabase
-    .from('outfit_cache')
+    .from('visualized_outfits')
     .delete()
     .eq('user_id', userId)
-    .eq('occasion', occasion);
+    .eq('suggestion_id', suggestionId);
 
   const { error } = await supabase
-    .from('outfit_cache')
+    .from('visualized_outfits')
     .insert([{
       user_id: userId,
-      outfit_id: outfit.id,
-      outfit_name: outfit.name,
-      wardrobe_item_ids: wardrobeItemIds,
-      // Fixed: changed 'row.stylist_notes' to 'outfit.stylistNotes'
-      stylist_notes: outfit.stylistNotes,
+      suggestion_id: suggestionId,
+      outfit_name: cacheItem.outfit.name,
+      wardrobe_item_ids: cacheItem.outfit.items.map(i => i.id),
+      stylist_notes: cacheItem.outfit.stylistNotes,
       occasion: occasion,
-      visualized_image_url: signedUrl,
-      generated_at: new Date(generatedAt).toISOString(),
-      expires_at: new Date(generatedAt + 24 * 60 * 60 * 1000).toISOString(),
-      history: combinationHistory || [] 
+      visualized_image_url: cacheItem.visualizedImage,
+      generated_at: new Date(cacheItem.generatedAt).toISOString(),
+      expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      history: cacheItem.combinationHistory || []
     }]);
 
   if (error) throw error;
 };
 
-export const useGenerationCredit = async (profile: UserProfile): Promise<UserProfile> => {
-  const newTotal = (profile.total_generations || 0) + 1;
-  let newCredits = profile.credits || 0;
-  
-  // Trial logic: first 15 are "free" (credits not deducted if below limit)
-  if (newTotal > 15) {
-    if (newCredits <= 0) throw new Error("OUT_OF_CREDITS");
-    newCredits -= 1;
-  }
-
-  const updated = { 
-    ...profile, 
-    credits: newCredits, 
-    total_generations: newTotal,
-    updated_at: new Date().toISOString()
-  };
-
+export const deleteOutfitFromCache = async (userId: string, suggestionId: string): Promise<void> => {
   const { error } = await supabase
-    .from('user_profile')
-    .update({ 
-      credits: updated.credits, 
-      total_generations: updated.total_generations, 
-      updated_at: updated.updated_at 
-    })
-    .eq('id', profile.id);
-
+    .from('visualized_outfits')
+    .delete()
+    .eq('user_id', userId)
+    .eq('suggestion_id', suggestionId);
   if (error) throw error;
-  return updated;
+};
+
+// --- CREDITS & DAILY LIMITS ---
+
+/**
+ * Checks if the daily reset has occurred. If so, resets counters.
+ */
+export const checkAndResetDailyLimits = async (profile: UserProfile): Promise<UserProfile> => {
+  const today = new Date().toISOString().split('T')[0];
+  
+  if (profile.last_reset_date !== today) {
+    const updated = {
+      ...profile,
+      daily_outfit_count: 0,
+      daily_image_count: 0,
+      last_reset_date: today,
+      updated_at: new Date().toISOString()
+    };
+    
+    // We update Supabase silently
+    await supabase
+      .from('user_profile')
+      .update({ 
+        daily_outfit_count: 0, 
+        daily_image_count: 0, 
+        last_reset_date: today,
+        updated_at: updated.updated_at 
+      })
+      .eq('id', profile.id);
+      
+    store.updateProfile(updated);
+    return updated;
+  }
+  return profile;
 };
 
 export const addCredits = async (profile: UserProfile, amount: number): Promise<UserProfile> => {
+  const newCredits = (profile.credits || 0) + amount;
+  const { error } = await supabase
+    .from('user_profile')
+    .update({ credits: newCredits, updated_at: new Date().toISOString() })
+    .eq('id', profile.id);
+
+  if (error) throw error;
+  return { ...profile, credits: newCredits };
+};
+
+/**
+ * Tracks usage for outfit suggestions (Step 1).
+ * Freemium Limit: 10 per day.
+ * Updated: Only enforces limits if user has 0 credits.
+ */
+export const trackOutfitGeneration = async (profile: UserProfile): Promise<UserProfile> => {
+  if (profile.is_premium) return profile;
+
+  // If user has credits, they bypass the daily limit restriction for outfits
+  if ((profile.credits || 0) > 0) return profile;
+
+  const currentCount = profile.daily_outfit_count || 0;
+  if (currentCount >= 10) throw new Error("DAILY_LIMIT_REACHED_OUTFIT");
+
+  const newCount = currentCount + 1;
+  const updated = { ...profile, daily_outfit_count: newCount };
+
+  await supabase
+    .from('user_profile')
+    .update({ daily_outfit_count: newCount })
+    .eq('id', profile.id);
+
+  store.updateProfile(updated);
+  return updated;
+};
+
+/**
+ * Tracks usage for image visualization (Step 2) & Restores.
+ * Freemium Limit: 1 per day.
+ * Replaces old 'useGenerationCredit' for visual tasks.
+ */
+export const useGenerationCredit = async (profile: UserProfile): Promise<UserProfile> => {
+  // UNLIMITED ACCESS for Elite/Premium members
+  if (profile.is_premium) return profile;
+
+  // Check Daily Limit for Free Users
+  const currentImageCount = profile.daily_image_count || 0;
+  
+  // Free users get 1 per day
+  if (currentImageCount >= 1) {
+    // Fallback to Credits if daily limit exceeded? 
+    // The prompt says "Give 1 image generation per day for free". 
+    // It implies if they have credits they can use them, OR if not they hit paywall.
+    // For this implementation, we will check credits as a fallback.
+    if ((profile.credits || 0) > 0) {
+      const newCredits = profile.credits - 1;
+      const updated = { ...profile, credits: newCredits, updated_at: new Date().toISOString() };
+      await supabase
+        .from('user_profile')
+        .update({ credits: newCredits, updated_at: updated.updated_at })
+        .eq('id', profile.id);
+      return updated;
+    } else {
+      throw new Error("OUT_OF_CREDITS"); // Triggers Paywall
+    }
+  }
+
+  // Increment Daily Count if within limit
+  const newImageCount = currentImageCount + 1;
   const updated = { 
     ...profile, 
-    credits: (profile.credits || 0) + amount,
+    daily_image_count: newImageCount,
     updated_at: new Date().toISOString()
   };
 
-  const { error } = await supabase
+  await supabase
     .from('user_profile')
     .update({ 
-      credits: updated.credits, 
+      daily_image_count: newImageCount,
       updated_at: updated.updated_at 
     })
     .eq('id', profile.id);
 
-  if (error) throw error;
+  store.updateProfile(updated);
   return updated;
 };
 
-export const deleteOutfitFromCache = async (userId: string, occasion: string): Promise<void> => {
-  const { error } = await supabase
-    .from('outfit_cache')
-    .delete()
-    .eq('user_id', userId)
-    .eq('occasion', occasion);
-
-  if (error) throw error;
-};
-
 export const deleteAllUserData = async (userId: string): Promise<void> => {
-  localStorage.removeItem('glam_last_avatar');
-  const { data: items } = await supabase
-    .from('wardrobe_items')
-    .select('item_id')
-    .eq('user_id', userId);
-
-  await supabase.from('user_profile').delete().eq('id', userId);
-  await supabase.from('outfit_cache').delete().eq('user_id', userId);
-  await supabase.from('wardrobe_items').delete().eq('user_id', userId);
-
+  const { data: items } = await supabase.from('wardrobe_items').select('item_id').eq('user_id', userId);
   const paths: string[] = [`${userId}/profile.jpg`, `${userId}/avatar.jpg`];
-  if (items && items.length > 0) {
-    items.forEach(item => paths.push(`${userId}/${item.item_id}.jpg`));
-  }
+  if (items) items.forEach(item => paths.push(`${userId}/${item.item_id}.jpg`));
   
-  const occasions: Occasion[] = ['Casual', 'Work', 'Date Night', 'Formal', 'Gym', 'Party', 'Wedding Guest', 'Weekend Brunch', 'Beach & Vacation', 'Concert & Festival', 'Job Interview', 'Business Trip', 'Lounge & Home'];
-  occasions.forEach(occ => paths.push(`${userId}/${occ}.jpg`));
-    
+  await supabase.from('visualized_outfits').delete().eq('user_id', userId);
+  await supabase.from('outfit_suggestions').delete().eq('user_id', userId);
+  await supabase.from('wardrobe_items').delete().eq('user_id', userId);
+  await supabase.from('user_profile').delete().eq('id', userId);
+
   try {
-    await supabase.storage
-      .from('glamorous')
-      .remove(paths);
-  } catch (e) {
-    console.warn("Storage cleanup incomplete", e);
-  }
+    await supabase.storage.from('glamorous').remove(paths);
+  } catch (e) { console.warn("Storage cleanup incomplete", e); }
 };

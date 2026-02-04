@@ -1,87 +1,104 @@
 
 import React, { useState } from 'react';
-import { Sparkles, Check, Crown, X, Star, CreditCard, ShieldCheck, Zap } from 'lucide-react';
+import { Sparkles, Check, Crown, X, Star, CreditCard, ShieldCheck, Zap, Calendar, Infinity } from 'lucide-react';
 import { t } from '../services/i18n';
 
 interface PaywallProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubscribe: (pack: 'starter' | 'growth' | 'pro' | 'premium_monthly') => void;
+  onSubscribe: (pack: 'starter' | 'growth' | 'pro' | 'premium_monthly' | 'premium_yearly') => void;
   lang?: string;
   totalGenerations?: number;
 }
 
 const Paywall: React.FC<PaywallProps> = ({ isOpen, onClose, onSubscribe, lang = 'en', totalGenerations = 0 }) => {
-  const [selectedPack, setSelectedPack] = useState<'starter' | 'growth' | 'pro' | 'premium_monthly'>('premium_monthly');
+  const [selectedPack, setSelectedPack] = useState<'starter' | 'growth' | 'pro' | 'premium_monthly' | 'premium_yearly'>('premium_yearly');
 
   if (!isOpen) return null;
 
   const PACKS = [
     { 
-      id: 'premium_monthly', 
-      name: 'Elite Subscription', 
-      price: '$14.99/mo', 
-      credits: 'Unlocks Style Lab', 
-      desc: 'Unlimited Simulations + Lab Tools',
+      id: 'premium_yearly', 
+      name: 'Yearly Membership', 
+      price: '$119.99/yr', 
+      credits: 'Unlimited Yearly Access', 
+      desc: 'Remove Daily Limits + No Ads',
       icon: <Crown className="w-5 h-5" />,
-      highlight: true
+      highlight: true,
+      tag: 'Best Value'
+    },
+    { 
+      id: 'premium_monthly', 
+      name: 'Monthly Elite', 
+      price: '$19.99/mo', 
+      credits: 'Unlimited Monthly Access', 
+      desc: 'Remove Daily Limits + No Ads',
+      icon: <Calendar className="w-5 h-5" />,
+      highlight: false
     },
     { 
       id: 'growth', 
       name: t('growth_pack', lang), 
-      price: '$7.99', 
+      price: '$8.99', 
       credits: '200 Credits', 
-      desc: 'Boutique Regular',
+      desc: 'Refill Credits',
       icon: <Sparkles className="w-5 h-5" />
     },
     { 
       id: 'starter', 
       name: t('starter_pack', lang), 
       price: '$2.99', 
-      credits: '50 Credits', 
-      desc: 'Occasional Stylist',
+      credits: '59 Credits', 
+      desc: 'Refill Credits',
       icon: <Zap className="w-5 h-5" />
     }
   ];
 
   return (
-    <div className="fixed inset-0 z-[200] flex flex-col items-center justify-end sm:justify-center p-6 bg-black/90 backdrop-blur-xl animate-in fade-in duration-500">
-      <div className="absolute top-8 right-8">
-        <button onClick={onClose} className="p-3 text-white/30 hover:text-white transition-colors">
+    <div 
+      className="fixed inset-0 z-[300] flex flex-col items-center justify-end sm:justify-center p-6 bg-black/90 backdrop-blur-xl animate-in fade-in duration-500 overflow-y-auto"
+      onClick={onClose}
+    >
+      <div 
+        className="w-full max-w-md bg-zinc-900 rounded-[56px] p-8 pb-10 shadow-2xl border border-white/5 relative flex flex-col items-center text-center animate-in slide-in-from-bottom-12 duration-700 my-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        
+        {/* Close Button Inside Container - Enhanced Visibility */}
+        <button 
+          onClick={onClose} 
+          className="absolute top-6 right-6 p-3 bg-white/10 hover:bg-white/20 text-white rounded-full z-50 transition-all active:scale-90"
+          aria-label="Close subscription view"
+        >
           <X className="w-6 h-6" />
         </button>
-      </div>
 
-      <div className="w-full max-w-md bg-zinc-900 rounded-[56px] p-8 shadow-2xl border border-white/5 relative overflow-hidden flex flex-col items-center text-center animate-in slide-in-from-bottom-12 duration-700">
-        <div className="absolute -top-24 -left-24 w-64 h-64 bg-[#26A69A]/10 blur-[100px] rounded-full" />
-        <div className="absolute -bottom-24 -right-24 w-64 h-64 bg-amber-500/10 blur-[100px] rounded-full" />
-
-        <div className="w-16 h-16 bg-white/5 border border-white/10 rounded-3xl flex items-center justify-center shadow-2xl relative z-10 mb-6">
-          <Sparkles className="w-8 h-8 text-[#26A69A]" />
+        {/* Absolute Background Elements with their own overflow containment */}
+        <div className="absolute inset-0 rounded-[56px] overflow-hidden pointer-events-none">
+          <div className="absolute -top-24 -left-24 w-64 h-64 bg-[#26A69A]/10 blur-[100px] rounded-full" />
+          <div className="absolute -bottom-24 -right-24 w-64 h-64 bg-amber-500/10 blur-[100px] rounded-full" />
         </div>
 
-        <div className="mb-8">
-          <h2 className="text-2xl font-black text-white uppercase tracking-tight leading-none">Archival Access</h2>
-          <p className="text-[9px] text-zinc-500 font-black uppercase tracking-[4px] mt-3">
-            {totalGenerations >= 15 ? t('trial_completed', lang) : `Trial Progress: ${totalGenerations}/15`}
-          </p>
+        <div className="w-16 h-16 bg-white/5 border border-white/10 rounded-3xl flex items-center justify-center shadow-2xl relative z-10 mb-6 mt-4">
+          <Infinity className="w-8 h-8 text-[#26A69A]" />
         </div>
 
-        <div className="w-full space-y-3 mb-8">
+        {/* Added pt-6 to the container to ensure "Best Value" badge isn't clipped */}
+        <div className="w-full space-y-4 mb-8 overflow-y-auto max-h-[45vh] no-scrollbar pr-1 pt-6 relative z-10">
           {PACKS.map((pack) => (
             <button 
               key={pack.id}
               onClick={() => setSelectedPack(pack.id as any)}
-              className={`w-full p-5 rounded-3xl border-2 transition-all relative text-left ${
+              className={`w-full p-6 rounded-3xl border-2 transition-all relative text-left ${
                 selectedPack === pack.id 
                   ? 'bg-white/5 border-[#26A69A] shadow-[0_0_20px_rgba(38,166,154,0.1)]' 
                   : 'bg-zinc-800/50 border-white/5 hover:border-white/10'
               }`}
             >
               {pack.highlight && (
-                <div className="absolute -top-3 right-6 bg-[#26A69A] px-3 py-1 rounded-full flex items-center space-x-1">
+                <div className="absolute -top-3.5 right-6 bg-amber-500 px-4 py-1.5 rounded-full flex items-center space-x-1 shadow-lg z-20">
                   <Star className="w-2.5 h-2.5 text-white fill-current" />
-                  <span className="text-[8px] font-black text-white uppercase tracking-widest">Recommended</span>
+                  <span className="text-[8px] font-black text-white uppercase tracking-widest">{pack.tag || 'Recommended'}</span>
                 </div>
               )}
               <div className="flex justify-between items-center">

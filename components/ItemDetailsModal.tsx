@@ -77,7 +77,7 @@ const ItemDetailsModal: React.FC<ItemDetailsModalProps> = ({ item, userId, isOpe
 
   return (
     <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/70 backdrop-blur-xl animate-in fade-in duration-300">
-      <div className="bg-white w-full max-w-lg h-[90vh] sm:rounded-[48px] overflow-hidden flex flex-col relative shadow-[0_32px_128px_-16px_rgba(0,0,0,0.5)] mx-4">
+      <div className="bg-white w-full max-lg h-[90vh] sm:rounded-[48px] overflow-hidden flex flex-col relative shadow-[0_32px_128px_-16px_rgba(0,0,0,0.5)] mx-4">
         
         {/* Sticky Header for consistent button visibility */}
         <div className="sticky top-0 z-10 bg-white/95 backdrop-blur-md px-8 py-6 border-b border-gray-50 flex items-center justify-between">
@@ -114,17 +114,19 @@ const ItemDetailsModal: React.FC<ItemDetailsModalProps> = ({ item, userId, isOpe
           </div>
 
           <div className="px-8 pb-16 space-y-10">
-            {/* Editorial Note Section - Classy & Professional */}
+            {/* Editorial Note Section - Couture Specification */}
             <section className="relative">
               <div className="bg-[#FAF9F6] rounded-[40px] p-8 relative border border-[#E5E4E2] shadow-sm">
                 <Quote className="absolute top-4 left-4 w-8 h-8 text-[#26A69A]/10 -scale-x-100" />
                 <div className="flex flex-col items-center text-center space-y-4">
-                  <span className="text-[9px] font-black text-[#26A69A] uppercase tracking-[5px]">Editorial Brief</span>
-                  <p className="text-lg leading-relaxed font-serif text-gray-700 italic px-4">
-                    "{item.description || "A masterfully curated archival piece, selected for its timeless silhouette and exceptional versatility in the modern boutique wardrobe."}"
-                  </p>
+                  <span className="text-[9px] font-black text-[#26A69A] uppercase tracking-[5px]">Couture Specification</span>
+                  <div className="w-full text-left">
+                    <p className="text-sm leading-relaxed font-serif text-gray-700 italic whitespace-pre-line px-4">
+                      {item.description || "Archival technical data pending synchronization."}
+                    </p>
+                  </div>
                   <div className="w-12 h-px bg-[#26A69A]/20" />
-                  <span className="text-[8px] font-black text-gray-300 uppercase tracking-[3px]">GlamAI Senior Stylist</span>
+                  <span className="text-[8px] font-black text-gray-300 uppercase tracking-[3px]">Garment Engineering Archive</span>
                 </div>
               </div>
             </section>

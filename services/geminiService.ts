@@ -1,39 +1,76 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { WardrobeItem, Outfit, Category, Occasion, UserProfile, ORDERED_OCCASIONS } from "../types";
 
-export type RestorationMode = 'portrait' | 'repair' | 'upscale';
+export type RestorationMode = 'portrait' | 'repair' | 'upscale' | 'creative';
+export type StyleVibe = 'Studio' | 'Street' | 'Estate' | 'Minimal' | 'Sunset' | 'Paris' | 'Resort';
+export type Occupation = 'Pop Star' | 'CEO' | 'Supermodel' | 'Professor' | 'Athlete' | 'Artist' | 'Astronaut' | 'Royal';
 
-const OCCASION_ENVIRONMENTS: Record<Occasion, string> = {
-  'Casual': 'A chic urban cobblestone street in Paris, soft cinematic sunlight.',
-  'Work': 'A sleek, glass-walled executive lounge in a modern skyscraper, high-end professional atmosphere.',
-  'Date Night': 'A moody, candlelit luxury rooftop terrace at night.',
-  'Formal': 'The grand foyer of a Neo-Classical opera house, marble staircases, extremely elegant.',
-  'Gym': 'A futuristic minimalist gym with soft ambient blue lighting.',
-  'Party': 'An exclusive neon-lit underground lounge with a velvet aesthetic.',
-  'Wedding Guest': 'A romantic Italian lakeside villa garden at twilight.',
-  'Weekend Brunch': 'A sun-drenched botanical cafe with organic wooden textures.',
-  'Beach & Vacation': 'A private overwater bungalow deck with turquoise waves.',
-  'Concert & Festival': 'A cinematic view from a VIP balcony of a grand music stadium.',
-  'Job Interview': 'A sophisticated minimalist office, professional lighting, corporate elite vibe.',
-  'Business Trip': 'A luxurious first-class cabin of a private jet, soft leather.',
-  'Lounge & Home': 'A serene minimalist sanctuary with floor-to-ceiling windows.'
+/**
+ * CROWD RESTORATION PROTOCOL - V31.0 (SCENE FIDELITY + EDITORIAL TYPOGRAPHY)
+ */
+const CROWD_RESTORATION_PROTOCOL = `
+[ALGORITHM: GLOBAL_SCENE_RECONSTRUCTION_V31.0]
+- MISSION: High-fidelity restoration of the ENTIRE image with optional Typography.
+- SUBJECTS: Preserve and enhance EVERY individual detected in the frame. If there are multiple people (10+), ensure each face is clear and sharpened.
+- NO OVERRIDE: Do NOT use any external identity references. Keep original faces exactly as they are, but upscaled.
+- TYPOGRAPHY: Artistically integrate any provided "Editorial Notes" using professional magazine-style fonts. The text should be legible, stylish, and placed to complement the composition.
+- TEXTILE FIDELITY: Sharp focus on clothing patterns, textures, and silhouettes for all people.
+- LIGHTING: Perform a global relighting pass that maintains natural shadows while improving dynamic range.
+- QUALITY: 8K Professional Editorial Photography standards.
+`;
+
+const PHOTO_REAL_PROTOCOL = `
+[ALGORITHM: IDENTITY_ARCHITECT_V25.0]
+- MASTER SOURCE (IMAGE 1): Extract the exact face, skin, and physical characteristics. This is the only person who exists in the final result.
+- DRESS SOURCE (IMAGE 2): Treat the person here as a ghost. Extract the dress (patterns, fabric, cut) and the background only.
+- SYNTHESIS: Reconstruct the person from IMAGE 1 wearing the dress from IMAGE 2.
+- NO BLENDING: Do NOT mix the faces. Use only the face from IMAGE 1. 
+- QUALITY: 50MP iPhone 15 Pro Max editorial photography. No watermarks.
+`;
+
+const VIBE_PROMPTS: Record<StyleVibe, string> = {
+  'Studio': 'A minimalist high-end luxury editorial studio with clean gray cyclorama and soft professional overhead lighting.',
+  'Street': 'A sun-drenched, high-fashion street style scene in SoHo New York with realistic urban architecture and natural daylight.',
+  'Estate': 'An opulent Old Money European estate garden with manicured hedges, stone fountains, and soft morning mist.',
+  'Minimal': 'A stark, ultra-modern architectural space with floor-to-ceiling glass and sharp geometric shadows.',
+  'Sunset': 'A warm, golden hour backlit outdoor terrace during the peak of sunset with long golden shadows and subtle lens flare.',
+  'Paris': 'A chic Parisian Cafe outdoor table on a cobblestone street with warm ambient bistro lighting.',
+  'Resort': 'A bright, high-contrast tropical luxury resort deck overlooking turquoise water and tropical palms.'
 };
 
-const FORMALITY_ANCHORS: Record<Occasion, string> = {
-  'Casual': 'Relaxed and effortless (Formality: 1-3/10).',
-  'Work': 'Polished and authoritative (Formality: 8-9/10). Structured silhouettes, professional palette.',
-  'Date Night': 'Elevated and alluring (Formality: 6-8/10).',
-  'Formal': 'Black-tie excellence (Formality: 10/10).',
-  'Gym': 'High-performance functional (Formality: 0-1/10).',
-  'Party': 'Bold and expressive (Formality: 4-9/10).',
-  'Wedding Guest': 'Celebratory and respectful (Formality: 8-9/10).',
-  'Weekend Brunch': 'Breezy botanical (Formality: 3-5/10).',
-  'Beach & Vacation': 'Resort leisure (Formality: 1-4/10).',
-  'Concert & Festival': 'Editorial edge (Formality: 2-6/10).',
-  'Job Interview': 'Impeccable first impression (Formality: 9-10/10). Extremely professional and modern.',
-  'Business Trip': 'Versatile transit luxury (Formality: 7-8/10).',
-  'Lounge & Home': 'Minimalist sanctuary (Formality: 0-2/10).'
+const OCCUPATION_PROMPTS: Record<Occupation, string> = {
+  'Pop Star': 'Global Pop Icon performing in a stadium with dramatic stage lighting, sequins, microphone, and fierce energy. High-fashion performance wear.',
+  'CEO': 'Fortune 500 Tech CEO in a modern glass office overlooking a skyline. Wearing a sharp bespoke power suit, confident posture, minimal aesthetic.',
+  'Supermodel': 'High-fashion runway model during Fashion Week. Avant-garde couture outfit, dramatic makeup, intense gaze, catwalk lighting.',
+  'Professor': 'Distinguished Ivy League Professor in a classic library with mahogany shelves. Tweed jacket, glasses, intellectual atmosphere, warm lighting.',
+  'Athlete': 'Elite Olympic Athlete in a high-tech stadium or gym setting. Performance sportswear, sweat sheen, intense focus, dynamic action lighting.',
+  'Artist': 'Contemporary Artist in a sunlit industrial loft studio. Paint-splattered designer overalls, holding brushes, surrounded by large canvas art.',
+  'Astronaut': 'Futuristic Space Explorer inside a sci-fi spacecraft or on a lunar surface. Sleek, high-tech spacesuit (helmet off), glowing ambient lights.',
+  'Royal': 'Modern Royalty in a palace throne room. Regal sash, crown jewels, velvet cape, ornate background, dignified and majestic posture.'
+};
+
+const VOGUE_PROTOCOL = `
+[ALGORITHM: GLAM_CORE_V5.1]
+1. IDENTITY LOCK (ABSOLUTE): The subject's appearance in the reference avatar (Image 1) is the immutable blueprint. You MUST NOT modify bone structure, eye geometry, or facial proportions. Retain 100% likeness.
+2. NEURAL DRAPING: Analyze the garments in product images. Perform high-fidelity synthesis where the subject wears these items. Account for gravity, layered physics (e.g. jackets over shirts), and fabric-specific folds.
+3. LUMINANCE RE-INDEXING: Apply high-key studio lighting. Eliminate muddy shadows and gray mid-tones. Use a "Radiant Editorial" finish.
+4. TEXTURE ARCHITECTURE: Reconstruct micro-details in fabric (silk sheen, denim weave, leather grain) to 8K perceptual clarity.
+`;
+
+const OCCASION_ENVIRONMENTS: Record<Occasion, string> = {
+  'Casual': 'An open-air urban plaza with modern architecture, soft daylight filtering through glass facades, and relaxed pedestrian flow.',
+  'Work': 'A sleek corporate office with polished floors, ergonomic desks, large windows overlooking the city, and subtle ambient lighting.',
+  'Date Night': 'An intimate upscale restaurant with dim candlelight, velvet seating, warm tones, and soft background music.',
+  'Formal': 'A grand ballroom with marble floors, chandeliers, tall arched windows, and elegant gallery-style decor.',
+  'Gym': 'A minimalist fitness studio with mirrored walls, polished concrete, high-end equipment, and bright overhead lighting.',
+  'Party': 'A vibrant nightclub with neon accents, dynamic spotlights, a crowded dance floor, and pulsing electronic music.',
+  'Wedding Guest': 'A romantic garden estate with manicured lawns, floral arches, string lights, and a serene sunset backdrop.',
+  'Weekend Brunch': 'A sunlit café terrace with modern furniture, greenery-filled planters, glass walls, and bustling weekend energy.',
+  'Beach & Vacation': 'A luxury resort deck with ocean views, wooden cabanas, flowing curtains, palm trees, and golden sunlight.',
+  'Concert & Festival': 'A massive outdoor stage with dynamic lighting rigs, LED screens, energetic crowds, and cinematic atmosphere.',
+  'Job Interview': 'A professional lobby with neutral tones, minimalist furniture, polished stone floors, and bright natural light.',
+  'Business Trip': 'An exclusive airport lounge with leather seating, panoramic runway views, modern decor, and quiet ambiance.',
+  'Lounge & Home': 'A cozy designer apartment with minimalist furniture, warm lighting, soft textiles, and a relaxed atmosphere.'
 };
 
 export const isItemSuitableForOccasion = (item: WardrobeItem, occasion: Occasion): boolean => {
@@ -46,16 +83,13 @@ export const isItemSuitableForOccasion = (item: WardrobeItem, occasion: Occasion
     if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
       try { tags = JSON.parse(trimmed); } catch { tags = [trimmed]; }
     } else if (trimmed.includes(',')) { tags = trimmed.split(',').map(s => s.trim()); } 
-    else { tags = [trimmed]; }
+    else { tags = [String(raw)]; }
   } else { tags = [String(raw)]; }
   const normalizedOccasion = occasion.toLowerCase().trim().replace(/[^\w\s&]/g, '');
   return tags.some(tag => {
     let nt = String(tag).toLowerCase().trim().replace(/[\[\]"']/g, '').replace(/[^\w\s&]/g, '');
     if (!nt) return false;
     if (nt === normalizedOccasion) return true;
-    const occWords = normalizedOccasion.split(/\s+|&|and/).filter(w => w.length > 2);
-    const tagWords = nt.split(/\s+|&|and/).filter(w => w.length > 2);
-    if (tagWords.some(tw => occWords.some(ow => ow.includes(tw) || tw.includes(ow)))) return true;
     return nt.length > 3 && (normalizedOccasion.includes(nt) || nt.includes(normalizedOccasion));
   });
 };
@@ -65,12 +99,12 @@ const parseSafeJson = (text: string): any => {
     const match = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
     if (match && match[1]) { try { return JSON.parse(match[1].trim()); } catch { return null; } }
     const fb = text.indexOf('{'), lb = text.lastIndexOf('}');
-    if (fb !== -1 && lb > fb) { try { return JSON.parse(text.substring(fb, lb + 1)); } catch {} }
+    if (fb !== -1 && lb > fb) { try { try { return JSON.parse(text.substring(fb, lb + 1)); } catch {} } catch {} }
     return null;
   }
 };
 
-const resizeImageForAI = async (base64: string, maxDim = 384): Promise<{ data: string, mimeType: string }> => {
+const resizeImageForAI = async (base64: string, maxDim = 1024): Promise<{ data: string, mimeType: string }> => {
   return new Promise((resolve) => {
     const img = new Image();
     img.crossOrigin = "anonymous";
@@ -81,31 +115,23 @@ const resizeImageForAI = async (base64: string, maxDim = 384): Promise<{ data: s
       else { if (height > maxDim) { width = (width * maxDim) / height; height = maxDim; } }
       canvas.width = width; canvas.height = height;
       const ctx = canvas.getContext('2d');
-      if (ctx) { ctx.fillStyle = 'white'; ctx.fillRect(0, 0, width, height); ctx.drawImage(img, 0, 0, width, height); }
-      resolve({ data: canvas.toDataURL('image/jpeg', 0.7).split(',')[1], mimeType: 'image/jpeg' });
+      if (ctx) { 
+        ctx.fillStyle = 'white'; 
+        ctx.fillRect(0, 0, width, height); 
+        ctx.drawImage(img, 0, 0, width, height); 
+      }
+      resolve({ data: canvas.toDataURL('image/jpeg', 0.9).split(',')[1], mimeType: 'image/jpeg' });
     };
     img.onerror = () => resolve({ data: base64.split(',')[1] || base64, mimeType: 'image/jpeg' });
     img.src = base64;
   });
 };
 
-const normalizeCategory = (cat: string): Category => {
-  const c = cat.toLowerCase().trim();
-  if (c.includes('bag') || ['handbag', 'satchel', 'purse', 'clutch', 'tote', 'backpack'].some(t => c.includes(t))) return 'Bags';
-  if (c.includes('access') || ['jewelry','hat','belt','scarf','watch'].some(t => c.includes(t))) return 'Accessories';
-  if (c.includes('top') || ['shirt','blouse','sweater','hoodie','t-shirt'].includes(c)) return 'Tops';
-  if (c.includes('bottom') || ['pants','jeans','skirt','trousers','shorts'].includes(c)) return 'Bottoms';
-  if (c.includes('shoe') || ['footwear','boots','sneakers','heels'].includes(c)) return 'Shoes';
-  if (c.includes('dress') || ['gown','jumpsuit'].includes(c)) return 'Dresses';
-  if (c.includes('outer') || ['jacket','coat','blazer','cardigan'].includes(c)) return 'Outerwear';
-  return 'Tops'; 
-};
-
 export const getBase64Data = async (urlOrBase64: string): Promise<string> => {
   if (urlOrBase64.startsWith('data:image')) return urlOrBase64.split(',')[1];
   const response = await fetch(urlOrBase64, { mode: 'cors' });
   if (!response.ok) throw new Error("UNABLE_TO_FETCH_URL");
-  const blob = await response.blob();
+  const blob = await response.blob() as Blob;
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
@@ -114,80 +140,85 @@ export const getBase64Data = async (urlOrBase64: string): Promise<string> => {
   });
 };
 
-export const suggestOutfit = async (
+export const suggestOutfits = async (
   items: WardrobeItem[], 
   occasion: Occasion, 
   profile?: UserProfile | null,
   avoidCombinations: string[] = [],
   isUniversal: boolean = false
-): Promise<Outfit> => {
+): Promise<{ outfits: Outfit[], noMoreCombinations: boolean }> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const strictlyMatched = items.filter(i => isItemSuitableForOccasion(i, occasion));
   
-  const itemsText = items.slice(0, 100).map(i => {
-    const isStrict = strictlyMatched.find(s => s.id === i.id);
-    return `[ID:${i.id}] ${i.name} (${i.category}) | F:${i.formality || 'Med'} | Suitability:${isStrict ? 'HIGH' : 'LOW'}`;
-  }).join('\n');
+  // SPEED OPTIMIZATION: Extremely compressed item text to minimize token processing
+  const itemsText = items.slice(0, 200)
+  .map(i => `${i.id}|${i.name.slice(0, 15)}|${i.category}|${i.primaryColor || ''}`)
+  .join('\n');
 
-  const formalityGuideline = FORMALITY_ANCHORS[occasion] || "Standard high-fashion aesthetic.";
 
-  const systemInstruction = `You are the World's Best Professional Fashion Stylist. 
-OCCASION: "${occasion}" (${formalityGuideline})
-${isUniversal ? 'CREATIVE IMPROV: Use your elite taste to curate from the entire archive. Prioritize aesthetic harmony and occasion formality.' : 'SIGNATURE EDIT: Prioritize items with HIGH Suitability.'}
-AVOID REPETITION: Do not use ID combinations listed here: ${avoidCombinations.join(', ')}.
-Output JSON: { name, itemIds, stylistNotes, noMoreCombinations }. 
-IMPORTANT: Only return noMoreCombinations: true if you have literally tried every single logical permutation for this occasion and cannot produce a fresh look.`;
+  const systemInstruction = `Role: Elite Stylist. JSON output only.
+Task: Design 5-10 outfits for "${occasion}" using the ARCHIVE.
+Logic: Dress/Gown = 1 piece. Top+Bottom = Ensemble. Add Access/Shoes/Bags.
+Output: { options: [{ name, itemIds: [string], stylistNotes }], noMoreCombinations: boolean }`;
 
   const response = await ai.models.generateContent({
-    model: 'gemini-3-flash-preview', 
-    contents: `ARCHIVE:\n${itemsText}`,
+    model: 'gemini-2.5-flash-lite', 
+    contents: `ARCHIVE:\n${itemsText}\n\nAVOID:\n${avoidCombinations.join('\n')}`,
     config: {
       systemInstruction,
       responseMimeType: "application/json",
-      thinkingConfig: { thinkingBudget: 0 }, 
       responseSchema: {
         type: Type.OBJECT,
         properties: {
-          name: { type: Type.STRING },
-          itemIds: { type: Type.ARRAY, items: { type: Type.STRING } },
-          stylistNotes: { type: Type.STRING },
+          options: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                name: { type: Type.STRING },
+                itemIds: { type: Type.ARRAY, items: { type: Type.STRING } },
+                stylistNotes: { type: Type.STRING }
+              },
+              required: ["name", "itemIds", "stylistNotes"]
+            }
+          },
           noMoreCombinations: { type: Type.BOOLEAN }
         },
-        required: ["name", "itemIds", "stylistNotes", "noMoreCombinations"]
+        required: ["options", "noMoreCombinations"]
       }
     }
   });
 
-  const result = parseSafeJson(response.text) || {};
-  const selectedItems = (result.itemIds || []).map((id: string) => items.find(item => item.id === id)).filter(Boolean);
-
-  return {
-    id: Math.random().toString(36).substr(2, 9),
-    name: result.name || `${occasion} Elite Selection`,
-    items: selectedItems as WardrobeItem[],
-    stylistNotes: result.stylistNotes,
-    occasion,
-    noMoreCombinations: result.noMoreCombinations || false,
-    isUniversal
+  const result = parseSafeJson(response.text) || { options: [], noMoreCombinations: false };
+  return { 
+    outfits: (result.options || []).map((opt: any) => ({
+      id: Math.random().toString(36).substr(2, 9),
+      name: opt.name,
+      items: (opt.itemIds || []).map((id: string) => items.find(item => item.id === id)).filter(Boolean) as WardrobeItem[],
+      stylistNotes: opt.stylistNotes,
+      occasion
+    })),
+    noMoreCombinations: result.noMoreCombinations 
   };
 };
 
 export const visualizeOutfit = async (outfit: Outfit, profile: UserProfile | null): Promise<string> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const itemsDesc = outfit.items.map(i => `${i.name} (${i.description})`).join(', ');
-  const envDetail = outfit.occasion ? (OCCASION_ENVIRONMENTS[outfit.occasion as Occasion] || "A luxury lifestyle setting.") : "A luxury studio.";
+  const isGown = outfit.items.some(i => i.category === 'Dresses');
+  const itemsDesc = outfit.items.map(i => `${i.name} (${i.description || i.category})`).join(', ');
+  const envDetail = outfit.occasion ? (OCCASION_ENVIRONMENTS[outfit.occasion as Occasion] || "A luxury setting.") : "A luxury studio.";
 
-  const promptText = `World-class hyper-realistic Virtual Reality Simulation. 
-  SUBJECT: Maintain EXACT facial features, skin tone, and identity from Image 1. DO NOT change the person's face. 
-  The person in the final image must look exactly like the person in the source image.
-  WEARING: ${itemsDesc}. Do not modify the outfit design.
-  SETTING: A professional, hyper-realistic VR depiction of the user immersed in: ${envDetail}.
-  PROMPT: Full-body professional photography, cinematic lighting, 8k resolution. Zero identity drift. The person MUST look identical to Image 1.`;
+  const promptText = `${VOGUE_PROTOCOL}
+  WEARING: ${itemsDesc}. 
+  OUTFIT STRUCTURE: ${isGown ? "SINGLE-PIECE CONTINUOUS GOWN SILHOUETTE" : "SEPARATE PIECES: TOP AND BOTTOM ENSEMBLE"}.
+  SETTING: ${envDetail}.
+  IDENTITY PROTECTION: Image 1 is the subject's face. You MUST RETAIN 100% of their facial features and appearance. ZERO CHANGES.
+  QUALITY: Professional editorial lighting, vibrant colors.`;
 
   const parts: any[] = [];
   if (profile?.avatar_url) {
-    const avatarBase64 = await getBase64Data(profile.avatar_url);
-    parts.push({ inlineData: { data: avatarBase64, mimeType: 'image/jpeg' } });
+    const rawAvatar = await getBase64Data(profile.avatar_url);
+    const optimizedAvatar = await resizeImageForAI(`data:image/jpeg;base64,${rawAvatar}`, 768);
+    parts.push({ inlineData: { data: optimizedAvatar.data, mimeType: optimizedAvatar.mimeType } });
   }
   parts.push({ text: promptText });
 
@@ -198,20 +229,116 @@ export const visualizeOutfit = async (outfit: Outfit, profile: UserProfile | nul
   });
 
   const part = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-  if (!part) throw new Error("Reality synthesis failed.");
+  if (!part) throw new Error("Synthesis failed.");
+  return `data:image/png;base64,${part.inlineData!.data}`;
+};
+
+export const restoreFashionImage = async (base64: string, mode: RestorationMode, userRequest?: string, vibe?: StyleVibe): Promise<string> => {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const optimizedInput = await resizeImageForAI(base64, 1024);
+  
+  let modeFocus = "";
+  switch(mode) {
+    case 'portrait': modeFocus = "Extreme detail pass on all detected faces. Maintain 100% original likeness for everyone in frame."; break;
+    case 'repair': modeFocus = "Fix background artifacts and reconstruct fabric fidelity for all subjects."; break;
+    case 'upscale': modeFocus = "8K professional photography resolution across entire group shot."; break;
+    case 'creative': modeFocus = "Cinematic relighting shift for every person in the frame."; break;
+  }
+
+  const vibeDetail = vibe ? `ATMOSPHERE: ${VIBE_PROMPTS[vibe]}` : "Editorial atmosphere.";
+  const editorialNote = userRequest ? `EDITORIAL_NOTE (Integrate as Typography): "${userRequest}"` : "";
+
+  const response = await ai.models.generateContent({
+    model: 'gemini-2.5-flash-image',
+    contents: { 
+      parts: [
+        { inlineData: { data: optimizedInput.data, mimeType: optimizedInput.mimeType } }, 
+        { text: `${CROWD_RESTORATION_PROTOCOL}\nMODE_FOCUS: ${modeFocus}. ${vibeDetail}.\n${editorialNote}` }
+      ] 
+    }
+  });
+
+  const part = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+  if (!part) throw new Error("Restoration failed.");
+  return `data:image/png;base64,${part.inlineData!.data}`;
+};
+
+export const generateOccupationImage = async (base64: string, occupation: Occupation): Promise<string> => {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const optimizedInput = await resizeImageForAI(base64, 1024);
+  
+  const occupationPrompt = OCCUPATION_PROMPTS[occupation];
+
+  const prompt = `
+    [ALGORITHM: CAREER_IDENTITY_SHIFT_V2]
+    - INPUT: Portrait of the user.
+    - GOAL: Generate a photorealistic image of this EXACT person as a ${occupation}.
+    - IDENTITY LOCK: The face in the output MUST be identical to the input face. Maintain identity, facial structure, and ethnicity 100%. Do not generate a new face.
+    - SCENE & ATTIRE: ${occupationPrompt}
+    - QUALITY: 8K, cinematic lighting, highly detailed texture.
+    - OUTPUT: Single image of the user in the new role.
+  `;
+
+  const response = await ai.models.generateContent({
+    model: 'gemini-2.5-flash-image',
+    contents: {
+      parts: [
+        { inlineData: { data: optimizedInput.data, mimeType: optimizedInput.mimeType } },
+        { text: prompt }
+      ]
+    },
+    config: { imageConfig: { aspectRatio: "3:4" } }
+  });
+
+  const part = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+  if (!part) throw new Error("Transformation failed.");
+  return `data:image/png;base64,${part.inlineData!.data}`;
+};
+
+export const processFaceReplacement = async (targetSceneBase64: string, avatarBase64: string, userRequest?: string, vibe?: StyleVibe): Promise<string> => {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const avatar = await resizeImageForAI(avatarBase64, 1024);
+  const target = await resizeImageForAI(targetSceneBase64, 1024);
+
+  const vibeDetail = vibe ? `ATMOSPHERE: ${VIBE_PROMPTS[vibe]}` : "Editorial studio lighting.";
+
+  const prompt = `
+    ${PHOTO_REAL_PROTOCOL}
+    [ACTION: BIOMETRIC_IDENTITY_MIGRATION]
+    - TARGET: Take the person from IMAGE 1 (Identity Source).
+    - ACTION: Place the person from IMAGE 1 into the clothing and background of IMAGE 2 (Dress Source).
+    - MANDATORY: The resulting face MUST be an exact replica of the face in IMAGE 1. Discard the face from IMAGE 2.
+    - OUTFIT: The garment and its patterns (especially complex prints) from IMAGE 2 must be preserved exactly.
+    - ENVIRONMENT: ${vibeDetail}. ${userRequest || ''}
+    QUALITY: 8K Photorealistic. No watermarks.
+  `;
+
+  const response = await ai.models.generateContent({
+    model: 'gemini-2.5-flash-image',
+    contents: {
+      parts: [
+        { inlineData: { data: avatar.data, mimeType: avatar.mimeType } }, // MASTER IDENTITY
+        { inlineData: { data: target.data, mimeType: target.mimeType } }, // STYLE HOST
+        { text: prompt }
+      ]
+    },
+    config: { imageConfig: { aspectRatio: "3:4" } }
+  });
+
+  const part = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+  if (!part) throw new Error("Migration failed.");
   return `data:image/png;base64,${part.inlineData!.data}`;
 };
 
 export const analyzeUpload = async (base64Image: string, lang: string = 'en'): Promise<Partial<WardrobeItem>[]> => {
-  const { data, mimeType } = await resizeImageForAI(base64Image, 384); 
+  const { data, mimeType } = await resizeImageForAI(base64Image, 512); 
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  
   const response = await ai.models.generateContent({
-    model: 'gemini-3-flash-preview',
-    contents: { parts: [{ inlineData: { data, mimeType } }, { text: "Digitize garments." }] },
+    model: 'gemini-3-pro-preview',
+    contents: { parts: [{ inlineData: { data, mimeType } }, { text: "Extract wardrobe items data. Return JSON." }] },
     config: {
-      systemInstruction: `Extract garments: NAME, CATEGORY (Tops, Bottoms, Shoes, Bags, Dresses, Outerwear, Accessories), PRIMARY COLOR (HEX), DESCRIPTION, MATERIAL, and 2+ OCCASIONS from: ${ORDERED_OCCASIONS.join(', ')}. Also extract Pattern and Warmth Grade.`,
       responseMimeType: "application/json",
-      thinkingConfig: { thinkingBudget: 0 },
       responseSchema: {
         type: Type.OBJECT,
         properties: {
@@ -229,48 +356,25 @@ export const analyzeUpload = async (base64Image: string, lang: string = 'en'): P
                 warmthLevel: { type: Type.STRING },
                 occasionSuitability: { type: Type.ARRAY, items: { type: Type.STRING } }
               },
-              required: ["name", "category", "primaryColor", "description", "materialLook", "pattern", "warmthLevel", "occasionSuitability"]
+              required: ["name", "category"]
             }
           }
-        },
-        required: ["items"]
+        }
       }
     }
   });
   const result = parseSafeJson(response.text) || { items: [] };
-  return result.items.map((item: any) => ({ ...item, category: normalizeCategory(item.category) }));
+  return result.items;
 };
 
 export const generateItemImage = async (itemData: Partial<WardrobeItem>, sourceBase64: string): Promise<string> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const { data, mimeType } = await resizeImageForAI(sourceBase64, 384);
+  const { data, mimeType } = await resizeImageForAI(sourceBase64, 512);
   const response = await ai.models.generateContent({
     model: 'gemini-2.5-flash-image',
-    contents: { parts: [{ inlineData: { data, mimeType } }, { text: `Isolate ${itemData.name} on pure white. NO HUMANS.` }] }
+    contents: { parts: [{ inlineData: { data, mimeType } }, { text: `Isolate the ${itemData.name} on white background.` }] }
   });
   const part = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
   if (!part) throw new Error("Isolation failed");
-  return `data:image/png;base64,${part.inlineData!.data}`;
-};
-
-export const restoreFashionImage = async (base64: string, mode: RestorationMode, userRequest?: string): Promise<string> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const response = await ai.models.generateContent({
-    model: 'gemini-2.5-flash-image',
-    contents: { parts: [{ inlineData: { data: base64, mimeType: 'image/jpeg' } }, { text: `Restoration: ${mode}. ${userRequest || ''}. Preserve identity.` }] }
-  });
-  const part = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-  if (!part) throw new Error("Restoration failed");
-  return `data:image/png;base64,${part.inlineData!.data}`;
-};
-
-export const processQuickDress = async (clothesBase64: string[], avatarBase64: string, descriptions: string, userRequest?: string): Promise<string> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const parts: any[] = [{ inlineData: { data: avatarBase64.split(',')[1] || avatarBase64, mimeType: 'image/jpeg' } }];
-  clothesBase64.forEach(c => parts.push({ inlineData: { data: c.split(',')[1] || c, mimeType: 'image/jpeg' } }));
-  parts.push({ text: `Dress person in Image 1 with items provided. IDENTITY MUST BE PRESERVED. NO FACE CHANGES. ${descriptions}. ${userRequest || ''}.` });
-  const response = await ai.models.generateContent({ model: 'gemini-2.5-flash-image', contents: { parts } });
-  const part = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-  if (!part) throw new Error("Simulation failed");
   return `data:image/png;base64,${part.inlineData!.data}`;
 };

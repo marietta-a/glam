@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Plus, PackageOpen, Shirt, ShoppingBag, Sparkles, Footprints, Layers } from 'lucide-react';
+import { Plus, PackageOpen, Shirt, ShoppingBag, Sparkles, Footprints, Layers, User } from 'lucide-react';
 import { Category } from '../types';
 import { t } from '../services/i18n';
 
@@ -16,6 +16,7 @@ const getCategoryIcon = (category: Category) => {
     case 'Shoes': return <Footprints className="w-10 h-10" />;
     case 'Bags': return <ShoppingBag className="w-10 h-10" />;
     case 'Accessories': return <Sparkles className="w-10 h-10" />;
+    case 'Caps': return <User className="w-10 h-10" />;
     default: return <PackageOpen className="w-10 h-10" />;
   }
 };

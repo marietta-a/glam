@@ -1,5 +1,7 @@
 
-export type Category = 'All Items' | 'Tops' | 'Bottoms' | 'Outerwear' | 'Shoes' | 'Dresses' | 'Accessories' | 'Bags';
+// types.ts
+
+export type Category = 'All Items' | 'Tops' | 'Bottoms' | 'Outerwear' | 'Shoes' | 'Dresses' | 'Accessories' | 'Bags' | 'Caps';
 
 export type Occasion = 
   | 'Casual' 
@@ -16,19 +18,18 @@ export type Occasion =
   | 'Business Trip' 
   | 'Lounge & Home';
 
+export type ViewType = 'wardrobe' | 'outfits' | 'explore';
+
 export const ORDERED_OCCASIONS: Occasion[] = [
   'Casual', 'Work', 'Date Night', 'Formal', 'Weekend Brunch', 
   'Beach & Vacation', 'Wedding Guest', 'Gym', 'Party', 
   'Concert & Festival', 'Job Interview', 'Business Trip', 'Lounge & Home'
 ];
 
-export type EditorialStyle = 'Vogue' | 'Harper\'s' | 'Minimalist' | 'Avant-Garde' | 'Cyber-Glam' | 'Street-Chic';
-
 export interface WardrobeItem {
   id: string; 
   userId: string;
   name: string;
-  archivalId?: string;
   category: Category;
   subCategory?: string;
   primaryColor?: string;
@@ -72,8 +73,27 @@ export interface UserProfile {
   total_generations: number;
   trial_started_at: string | null;
   language: string;
+  // Daily Usage Tracking
+  last_reset_date?: string;
+  daily_outfit_count?: number;
+  daily_image_count?: number;
 }
 
+/**
+ * Represents a text-based AI suggestion (Step 1)
+ */
+export interface OutfitSuggestion {
+  id: string; // Database suggestion_id (UUID)
+  name: string;
+  items: WardrobeItem[];
+  stylistNotes: string;
+  occasion: Occasion;
+  isRejected?: boolean;
+}
+
+/**
+ * Represents the generic Outfit structure used in UI
+ */
 export interface Outfit {
   id: string;
   name: string;
@@ -81,31 +101,31 @@ export interface Outfit {
   stylistNotes: string;
   occasion?: Occasion;
   noMoreCombinations?: boolean;
-  isUniversal?: boolean;
 }
 
+/**
+ * Represents the Final Visualized Result stored in Cache (Step 2)
+ */
 export interface CachedOutfit {
-  outfit: Outfit;
+  id?: string; // Links to suggestion_id
+  outfit: Outfit; 
   visualizedImage: string | null;
   generatedAt: number;
   history?: string[]; 
-  combinationHistory?: string[]; // Sorted comma-separated item IDs to prevent repeats
+  combinationHistory?: string[];
   pastOutfits?: Outfit[];
   pastImages?: string[];
-  isRecycled?: boolean;
-  isExhausted?: boolean;
 }
 
 export interface UploadTask {
   id: string;
   status: 'analyzing' | 'illustrating' | 'saving' | 'complete' | 'error';
   progress: number;
-  totalItemsInBatch?: number;
-  processedItemsInBatch?: number;
   errorMessage?: string;
   previewUrl?: string;
+  totalItemsInBatch?: number;
+  processedItemsInBatch?: number;
 }
 
-export type OutfitCache = Record<string, CachedOutfit>;
-
-export type ViewType = 'wardrobe' | 'outfits' | 'explore';
+export type OutfitCache = Record<string, CachedOutfit>; // Key is suggestion_id
+export type SuggestionCache = Record<string, OutfitSuggestion[]>; // Key is Occasion
