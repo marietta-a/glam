@@ -18,7 +18,7 @@ const Paywall: React.FC<PaywallProps> = ({ isOpen, onClose, onSubscribe, lang = 
 
   const PACKS = [
     { 
-      id: 'premium_yearly', 
+      id: 'glam_premium_yearly', 
       name: 'Yearly Membership', 
       price: '$119.99/yr', 
       credits: 'Unlimited Yearly Access', 
@@ -28,7 +28,7 @@ const Paywall: React.FC<PaywallProps> = ({ isOpen, onClose, onSubscribe, lang = 
       tag: 'Best Value'
     },
     { 
-      id: 'premium_monthly', 
+      id: 'glam_premium_monthly', 
       name: 'Monthly Elite', 
       price: '$19.99/mo', 
       credits: 'Unlimited Monthly Access', 
@@ -37,7 +37,7 @@ const Paywall: React.FC<PaywallProps> = ({ isOpen, onClose, onSubscribe, lang = 
       highlight: false
     },
     { 
-      id: 'growth', 
+      id: 'glam_growth', 
       name: t('growth_pack', lang), 
       price: '$8.99', 
       credits: '200 Credits', 
@@ -45,7 +45,7 @@ const Paywall: React.FC<PaywallProps> = ({ isOpen, onClose, onSubscribe, lang = 
       icon: <Sparkles className="w-5 h-5" />
     },
     { 
-      id: 'starter', 
+      id: 'glam_starter', 
       name: t('starter_pack', lang), 
       price: '$2.99', 
       credits: '59 Credits', 
