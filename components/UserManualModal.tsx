@@ -1,121 +1,494 @@
-import React from 'react';
-import { X, Sparkles, Camera, Shirt, Wand2, Search, Zap, Layers, CheckCircle2, ImageIcon, Globe, Heart, PenTool, Eraser, User, CreditCard, ShieldCheck } from 'lucide-react';
+
+import React, { useMemo, useState, useRef, useEffect } from 'react';
+// Added ORDERED_OCCASIONS to the import list from ../types to fix undefined variable error
+import { WardrobeItem, Occasion, OutfitCache, CachedOutfit, UserProfile, OutfitSuggestion, ORDERED_OCCASIONS } from '../types';
+import { Sparkles, Shirt, RefreshCcw, Wand2, User, Camera, Loader2, Sparkle, Download, AlertTriangle, X, Eye, Globe, Layers, ArrowRight, CheckCircle2, Box, Fingerprint, Trash2, Quote } from 'lucide-react';
 import { t } from '../services/i18n';
+import { Capacitor } from '@capacitor/core';
+import { Filesystem, Directory } from '@capacitor/filesystem';
+import { Share } from '@capacitor/share';
+import { isItemSuitableForOccasion } from '../services/geminiService';
 
-const ManualSection: React.FC<{ icon: React.ReactNode, title: string, children: React.ReactNode }> = ({ icon, title, children }) => (
-  <div className="space-y-4">
-    <div className="flex items-center space-x-4">
-      <div className="p-2.5 bg-teal-50 rounded-xl text-[#26A69A]">
-        {icon}
-      </div>
-      <h3 className="text-lg font-black text-gray-900 uppercase tracking-tight">{title}</h3>
-    </div>
-    <div className="bg-gray-50/50 rounded-[32px] p-8 border border-gray-100/50 space-y-4">
-      {children}
-    </div>
-  </div>
-);
-
-const Step: React.FC<{ num: string, text: string }> = ({ num, text }) => (
-  <div className="flex items-start space-x-4">
-    <span className="text-[10px] font-black text-[#26A69A] bg-white w-6 h-6 rounded-lg flex items-center justify-center shadow-sm flex-shrink-0 mt-0.5">{num}</span>
-    <p className="text-sm text-gray-600 leading-relaxed">{text}</p>
-  </div>
-);
-
-interface UserManualModalProps {
-  isOpen: boolean;
-  onClose: () => void;
+interface OutfitsViewProps {
+  items: WardrobeItem[];
+  profile: UserProfile | null;
+  onAddClick: () => void;
+  cache: OutfitCache;
+  onUpdateCache: (occasion: Occasion, data: CachedOutfit) => void;
+  selectedOccasion: Occasion | null;
+  onOccasionChange: (occasion: Occasion | null) => void;
+  isGenerating: boolean;
+  isVisualizing: boolean;
+  generationPhase: 'analyzing' | 'designing' | 'visualizing' | 'complete';
+  onGenerate: (occasion: Occasion) => void;
+  onSelectOutfit: (outfit: OutfitSuggestion, force?: boolean) => void;
+  onDeleteSuggestion?: (suggestionId: string) => void;
+  suggestedOutfits?: OutfitSuggestion[];
+  newItemsCount?: number;
+  onItemClick?: (item: WardrobeItem) => void;
+  onPaywall?: () => void;
   lang?: string;
+  isSettingFace?: boolean;
+  onFaceUpload?: (base64: string) => void;
 }
 
-const UserManualModal: React.FC<UserManualModalProps> = ({ isOpen, onClose, lang = 'en' }) => {
-  if (!isOpen) return null;
+const OutfitPreviewComposite: React.FC<{ items: WardrobeItem[], blurred?: boolean }> = ({ items, blurred = false }) => {
+  const displayItems = items.slice(0, 4);
+  return (
+    <div className={`w-full h-full relative grid grid-cols-2 grid-rows-2 gap-0.5 bg-gray-50 transition-all duration-1000 ${blurred ? 'blur-md scale-110' : ''}`}>
+      {displayItems.map((item, idx) => (
+        <div key={idx} className="relative w-full h-full overflow-hidden">
+          <img src={item.imageUrl} className="w-full h-full object-cover" alt="Composite part" />
+          <div className="absolute inset-0 bg-black/[0.03]" />
+        </div>
+      ))}
+      {displayItems.length === 1 && <div className="col-start-2 row-span-2 bg-gray-50" />}
+      {displayItems.length === 2 && <div className="col-span-2 row-start-2 bg-gray-50" />}
+      {displayItems.length === 3 && <div className="col-start-2 row-start-2 bg-gray-50" />}
+      {!blurred && (
+        <>
+          <div className="absolute inset-0 bg-white/40 backdrop-blur-[0.5px]" />
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <Shirt className="w-6 h-6 text-gray-200/50" />
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
+
+const OutfitsView: React.FC<OutfitsViewProps> = ({
+  items,
+  profile,
+  onAddClick,
+  cache,
+  selectedOccasion,
+  onOccasionChange,
+  isGenerating,
+  isVisualizing,
+  onGenerate,
+  onSelectOutfit,
+  onDeleteSuggestion,
+  suggestedOutfits = [],
+  newItemsCount = 0,
+  onItemClick,
+  lang = 'en',
+  isSettingFace = false,
+  onFaceUpload
+}) => {
+  const [suitabilityIndex, setSuitabilityIndex] = useState(0);
+  const [activeSuggestionId, setActiveSuggestionId] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [designingIndex, setDesigningIndex] = useState(0);
+  const faceInputRef = useRef<HTMLInputElement>(null);
+
+  const DESIGNING_MESSAGES = [
+    "Analyzing Silhouette Architecture...",
+    "Cross-referencing Seasonal Palettes...",
+    "Consulting Archival Trends...",
+    "Finalizing Couture Combinations..."
+  ];
+
+  useEffect(() => {
+    let interval: any;
+    if (isGenerating) {
+      interval = setInterval(() => {
+        setDesigningIndex(prev => (prev + 1) % DESIGNING_MESSAGES.length);
+      }, 2500);
+    }
+    return () => clearInterval(interval);
+  }, [isGenerating]);
+
+  useEffect(() => {
+    let interval: any;
+    if (isSettingFace) {
+      setUploadProgress(0);
+      interval = setInterval(() => {
+        setUploadProgress(prev => {
+          if (prev >= 95) return prev;
+          return prev + Math.random() * 15;
+        });
+      }, 300);
+    } else {
+      setUploadProgress(100);
+      setTimeout(() => setUploadProgress(0), 1000);
+    }
+    return () => clearInterval(interval);
+  }, [isSettingFace]);
+
+  useEffect(() => {
+    if (suggestedOutfits.length > 0) {
+      if (!activeSuggestionId || !suggestedOutfits.find(s => s.id === activeSuggestionId)) {
+        setActiveSuggestionId(suggestedOutfits[0].id);
+      }
+    }
+  }, [suggestedOutfits, activeSuggestionId]);
+
+  const activeSuggestion = useMemo(() => {
+    return suggestedOutfits.find(s => s.id === activeSuggestionId) || null;
+  }, [suggestedOutfits, activeSuggestionId]);
+
+  const activeVisualization = useMemo(() => {
+    return activeSuggestionId ? cache[activeSuggestionId] : null;
+  }, [activeSuggestionId, cache]);
+
+  useEffect(() => {
+    let interval: any;
+    if (isVisualizing) {
+      interval = setInterval(() => {
+        setSuitabilityIndex(prev => (prev + 1) % 4);
+      }, 2500);
+    } else {
+      setSuitabilityIndex(0);
+    }
+    return () => clearInterval(interval);
+  }, [isVisualizing]);
+
+  const VISUALIZATION_STEPS = [
+    { label: 'Environment VR Simulation', icon: <Globe className="w-4 h-4" /> },
+    { label: 'Couture Reality Mapping', icon: <Layers className="w-4 h-4" /> },
+    { label: 'Identity Immersion Lock', icon: <User className="w-4 h-4" /> },
+    { label: 'Elite Editorial Render', icon: <Sparkles className="w-4 h-4" /> }
+  ];
+
+  const handleFaceSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => onFaceUpload?.(reader.result as string);
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleDownload = async () => {
+    if (!activeVisualization?.visualizedImage) return;
+    const filename = `GlamAI-${activeSuggestion?.name.replace(/\s+/g, '') || 'Outfit'}.png`;
+    try {
+      if (Capacitor.isNativePlatform()) {
+        const base64Data = activeVisualization.visualizedImage.split(',')[1];
+        const savedFile = await Filesystem.writeFile({
+          path: filename,
+          data: base64Data,
+          directory: Directory.Cache,
+        });
+        await Share.share({ title: 'Save your GlamAI Outfit', url: savedFile.uri });
+      } else {
+        const response = await fetch(activeVisualization.visualizedImage);
+        const blob = await response.blob() as Blob;
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      }
+    } catch (e) { console.error('Download failed:', e); }
+  };
+
+  if (items.length < 2) {
+    return (
+      <div className="flex-1 flex flex-col p-8 space-y-12 min-h-[75vh] animate-in fade-in duration-1000">
+        <div className="space-y-3">
+          <div className="flex items-center space-x-2">
+            <div className="w-8 h-px bg-[#26A69A]" />
+            <span className="text-[10px] font-black text-[#26A69A] uppercase tracking-[4px]">Digital Protocol</span>
+          </div>
+          <h2 className="text-4xl font-black text-gray-900 tracking-tight leading-none uppercase">The Style <br /> Architect</h2>
+        </div>
+        <div className="space-y-8">
+           <div className="flex items-start space-x-6 relative group">
+              <div className="absolute left-6 top-14 bottom-[-1.5rem] w-px bg-gray-100 group-hover:bg-[#26A69A]/30 transition-colors" />
+              <div className="w-12 h-12 bg-zinc-900 text-white rounded-[18px] flex flex-shrink-0 items-center justify-center shadow-xl z-10 transition-transform group-hover:scale-110">
+                 <Shirt className="w-5 h-5" />
+              </div>
+              <div className="pt-1">
+                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Step 01</p>
+                <h4 className="text-sm font-black text-gray-900 uppercase">Archive Digitization</h4>
+                <p className="text-xs text-gray-500 mt-2 leading-relaxed">Upload pieces to initialize. Progress: <span className="font-bold text-[#26A69A]">{items.length}/2</span></p>
+              </div>
+           </div>
+           <div className="flex items-start space-x-6 group">
+              <div className="w-12 h-12 bg-white border border-gray-100 text-gray-100 rounded-[18px] flex flex-shrink-0 items-center justify-center shadow-sm z-10 transition-transform group-hover:scale-110">
+                 <Globe className="w-5 h-5" />
+              </div>
+              <div className="pt-1">
+                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Step 02</p>
+                <h4 className="text-sm font-black text-gray-900 uppercase">VR Simulation</h4>
+                <p className="text-xs text-gray-500 mt-2 leading-relaxed">Our AI will simulate a hyper-realistic reality for your selection.</p>
+              </div>
+           </div>
+        </div>
+        <button onClick={onAddClick} className="w-full py-6 bg-[#26A69A] text-white font-black uppercase tracking-[3px] text-[11px] rounded-[32px] shadow-2xl active:scale-95 flex items-center justify-center space-x-4 group mt-auto">
+          <span>Begin Digitization</span>
+          <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+        </button>
+      </div>
+    );
+  }
+
+  if (!profile?.avatar_url || isSettingFace) {
+    return (
+      <div className="flex-1 flex flex-col p-8 space-y-12 min-h-[75vh] animate-in zoom-in duration-700 bg-white">
+        <div className="text-center space-y-4">
+          <div className="inline-flex items-center justify-center space-x-2 px-4 py-1.5 bg-zinc-900 text-white rounded-full">
+            <Sparkles className="w-3 h-3" />
+            <span className="text-[8px] font-black uppercase tracking-[2px]">{isSettingFace ? 'Archiving Identity' : 'Identity Blueprint Required'}</span>
+          </div>
+          <h2 className="text-4xl font-black text-gray-900 tracking-tight uppercase leading-none">Reality <br /> Sync</h2>
+          <p className="text-xs text-gray-400 font-medium px-8 leading-relaxed">
+            {isSettingFace ? 'Synchronizing your physical blueprints to our cloud archive...' : 'We require a facial reference to perform occasion-based reality synthesis.'}
+          </p>
+        </div>
+        <div className="relative flex-1 flex flex-col items-center justify-center">
+           <div className="w-64 h-64 rounded-[80px] border-2 border-dashed border-teal-100 flex items-center justify-center relative group">
+              <div className={`absolute inset-4 border-2 border-[#26A69A]/20 rounded-[64px] ${isSettingFace ? 'animate-spin border-t-[#26A69A]' : 'animate-pulse'}`} />
+              <div className="z-10 bg-white p-8 rounded-full shadow-2xl transition-transform group-hover:scale-110 duration-700">
+                {isSettingFace ? <Loader2 className="w-12 h-12 text-[#26A69A] animate-spin" /> : <User className="w-12 h-12 text-gray-200" />}
+              </div>
+           </div>
+           {isSettingFace && (
+             <div className="w-full max-w-[200px] mt-10 space-y-3">
+                <div className="flex items-center justify-between px-1">
+                   <span className="text-[8px] font-black text-[#26A69A] uppercase tracking-widest">Syncing Identity...</span>
+                   <span className="text-[10px] font-black text-gray-900">{Math.round(uploadProgress)}%</span>
+                </div>
+                <div className="w-full h-1 bg-gray-50 rounded-full overflow-hidden">
+                   <div className="h-full bg-[#26A69A] transition-all duration-300" style={{ width: `${uploadProgress}%` }} />
+                </div>
+             </div>
+           )}
+        </div>
+        <button onClick={() => faceInputRef.current?.click()} disabled={isSettingFace} className="w-full py-6 bg-zinc-900 text-white font-black uppercase tracking-[3px] text-[11px] rounded-[32px] shadow-2xl active:scale-95 transition-all flex items-center justify-center space-x-3 group">
+          {isSettingFace ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
+          <span>{isSettingFace ? 'Processing Archive' : 'Capture Blueprint'}</span>
+        </button>
+        <input type="file" ref={faceInputRef} onChange={handleFaceSelect} className="hidden" accept="image/*" />
+      </div>
+    );
+  }
 
   return (
-    <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-300">
-      <div className="bg-white w-full max-w-md h-[85vh] rounded-[48px] overflow-hidden shadow-2xl animate-in zoom-in duration-200 relative flex flex-col">
-        {/* Header */}
-        <div className="p-8 flex items-center justify-between border-b border-gray-50 flex-shrink-0">
-          <div>
-            <h2 className="text-xl font-bold text-gray-900 tracking-tight">{t('user_manual', lang)}</h2>
-            <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest mt-0.5">Boutique Mastery Protocol</p>
-          </div>
-          <button onClick={onClose} className="p-3 bg-gray-50 text-gray-400 rounded-2xl hover:bg-gray-100 transition-all active:scale-95">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-8 custom-scrollbar space-y-12 pb-20">
-          
-          {/* Welcome Card */}
-          <div className="bg-zinc-900 rounded-[40px] p-8 text-white relative overflow-hidden group">
-            <div className="absolute -top-10 -right-10 w-32 h-32 bg-[#26A69A]/20 blur-3xl rounded-full" />
-            <Sparkles className="w-8 h-8 text-[#26A69A] mb-6" />
-            <h3 className="text-2xl font-black uppercase tracking-tight mb-2 leading-none">Couture <br/> Intelligence</h3>
-            <p className="text-white/40 text-[11px] font-black uppercase tracking-[2px]">System Firmware V1.5.0</p>
-          </div>
-
-          <ManualSection icon={<Shirt className="w-5 h-5" />} title="Digitizing Your Archive">
-            <div className="space-y-4">
-              <p className="text-xs text-gray-500 font-medium leading-relaxed italic">Your wardrobe is more than clothes; it is a digital archival dataset.</p>
-              <Step num="01" text="Tap the '+' button to upload garments. AI automatically isolates the piece on a clean studio white background." />
-              <Step num="02" text="Sort your archive by category using the header tabs. Items are automatically tagged by pattern and material." />
-              <Step num="03" text="View individual technical blueprints by tapping any piece to see its warmth level and occasion suitability." />
-            </div>
-          </ManualSection>
-
-          <ManualSection icon={<Camera className="w-5 h-5" />} title="Style Identity (Face Proxy)">
-            <div className="space-y-4">
-              <p className="text-xs text-gray-500 font-medium leading-relaxed italic">For high-fidelity simulations, our engine requires a clear facial reference.</p>
-              <Step num="01" text="Access the Style Identity modal via the top profile icon to update your facial blueprint." />
-              <Step num="02" text="This photo is purely for identity mapping during Try-on simulations. Ensure lighting is neutral." />
-              <Step num="03" text="Changes here are locked to your biometric session for security." />
-            </div>
-          </ManualSection>
-
-          <ManualSection icon={<Wand2 className="w-5 h-5" />} title="The Stylist Engine">
-            <div className="space-y-4">
-              <p className="text-xs text-gray-500 font-medium leading-relaxed italic">The Stylist coordinates your archive based on occasion logic.</p>
-              <Step num="01" text="Select a Style Objective (Casual, Formal, etc.) to trigger the coordination algorithm." />
-              <Step num="02" text="Simulate Reality: Tap this to see the items rendered onto your Style Identity avatar in an occasion-specific VR environment." />
-              <Step num="03" text="Regenerate: If the first edit isn't right, refresh to explore alternative archival combinations." />
-            </div>
-          </ManualSection>
-
-          <ManualSection icon={<ImageIcon className="w-5 h-5" />} title="The Editorial Lab">
-            <div className="space-y-4">
-              <p className="text-xs text-gray-500 font-medium leading-relaxed italic">Advanced restoration and creative manipulation for fashion photography.</p>
-              <Step num="01" text="HD Restore: Upscale old outfit photos into 8K high-fashion campaign assets." />
-              <Step num="02" text="Vibe Palette: Choose 'Old Money', 'Street Style', or 'Golden Hour' to shift the atmospheric relighting." />
-              <Step num="03" text="Journaling: Add text notes (like 'Vogue Paris') to have them typeset into the image as typography." />
-            </div>
-          </ManualSection>
-
-          <ManualSection icon={<ShieldCheck className="w-5 h-5" />} title="Boutique Management">
-            <div className="space-y-4">
-              <p className="text-xs text-gray-500 font-medium leading-relaxed italic">Control your account data and elite status in the Settings laboratory.</p>
-              <Step num="01" text="Account Page: Update your public alias, full name, and style bio metadata." />
-              <Step num="02" text="Billing Page: Manage your Elite access, monitor remaining credits, or terminate renewal protocols." />
-              <Step num="03" text="Security: Request permanent archival erasure in the Danger Zone for GDPR/Privacy compliance." />
-            </div>
-          </ManualSection>
-
-          {/* Verification Footer */}
-          <div className="pt-6 border-t border-gray-100 flex flex-col items-center text-center space-y-4">
-            <CheckCircle2 className="w-8 h-8 text-[#26A69A]/30" />
-            <p className="text-[10px] text-gray-300 font-black uppercase tracking-[3px]">Protocol Mastery Verified</p>
-          </div>
+    <div className="p-0 space-y-0 pb-16">
+      {/* 1. OCCASION SELECTOR HEADER */}
+      <div className="px-6 py-5 bg-white border-b border-gray-50 sticky top-0 z-[40]">
+        <div className="flex space-x-3 overflow-x-auto no-scrollbar -mx-1 px-1">
+          {ORDERED_OCCASIONS.map((occ) => {
+            const isSelected = selectedOccasion === occ;
+            const hasCached = Object.values(cache).some((c: CachedOutfit) => c.outfit.occasion === occ);
+            return (
+              <button
+                key={occ} onClick={() => onOccasionChange(occ)}
+                className={`flex-shrink-0 px-5 py-2.5 rounded-2xl text-[9px] font-black uppercase tracking-widest transition-all border relative ${
+                  isSelected ? 'bg-[#26A69A] text-white border-[#26A69A] shadow-md' : 'bg-gray-50 text-gray-400 border-transparent hover:bg-gray-100'
+                }`}
+              >
+                {occ}
+                {hasCached && <div className={`absolute top-1 right-1 w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-white' : 'bg-[#26A69A]'}`} />}
+              </button>
+            );
+          })}
         </div>
       </div>
-      
+
+      <div className="p-6 space-y-12">
+        {isGenerating ? (
+          <div className="py-24 flex flex-col items-center justify-center text-center space-y-10">
+            <div className="w-24 h-24 border-4 border-[#26A69A] border-t-transparent rounded-full animate-spin" />
+            <div className="space-y-2">
+              <h3 className="text-sm font-black text-gray-900 uppercase tracking-widest">{DESIGNING_MESSAGES[designingIndex]}</h3>
+              <p className="text-[10px] text-[#26A69A] font-black uppercase tracking-[3px] animate-pulse">Archival discovery active</p>
+            </div>
+          </div>
+        ) : suggestedOutfits.length > 0 ? (
+          <div className="space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-700">
+            
+            {/* 2. ARCHIVE GRID (SUGGESTIONS) */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between px-1">
+                 <p className="text-[10px] font-black text-gray-400 uppercase tracking-[3px]">Couture Archives</p>
+                 <button 
+                  onClick={() => onGenerate(selectedOccasion!)}
+                  className="p-2 bg-gray-50 text-gray-400 rounded-xl hover:bg-teal-50 hover:text-[#26A69A] transition-all active:scale-90 border border-gray-100"
+                  title="Regenerate Edits"
+                 >
+                   <RefreshCcw className="w-4 h-4" />
+                 </button>
+              </div>
+              <div className="flex space-x-5 overflow-x-auto no-scrollbar pb-6 px-1">
+                {suggestedOutfits.map((s) => {
+                  const isActive = activeSuggestionId === s.id;
+                  const hasImage = cache[s.id]?.visualizedImage;
+                  return (
+                    <div key={s.id} className="relative flex-shrink-0 w-32 group">
+                      <button
+                        onClick={() => setActiveSuggestionId(s.id)}
+                        className={`w-full text-left transition-all ${isActive ? 'scale-105' : 'opacity-50 scale-95'}`}
+                      >
+                        <div className={`aspect-[4/5] rounded-[36px] overflow-hidden border-2 mb-3 transition-all relative ${isActive ? 'border-[#26A69A] shadow-xl' : 'border-transparent shadow-sm'}`}>
+                          {hasImage ? (
+                             <img src={cache[s.id].visualizedImage!} className="w-full h-full object-cover" alt="Archived Simulation" />
+                          ) : (
+                             <OutfitPreviewComposite items={s.items} />
+                          )}
+                          {isActive && (
+                            <div className="absolute inset-0 bg-black/5 flex items-center justify-center backdrop-blur-[1px]">
+                              <div className="p-1.5 bg-[#26A69A] rounded-full text-white shadow-lg"><CheckCircle2 className="w-3 h-3" /></div>
+                            </div>
+                          )}
+                        </div>
+                        <p className="text-[9px] font-black text-gray-900 truncate uppercase tracking-tighter px-1">{s.name}</p>
+                      </button>
+                      
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); setPendingDeleteId(s.id); }}
+                        className="absolute -top-1 -right-1 p-2 bg-white text-gray-300 hover:text-red-500 rounded-full shadow-lg border border-gray-50 z-20 transition-all active:scale-90"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* 3. SIMULATION STAGE */}
+            <div className="space-y-8">
+              <div className="relative aspect-[3/4] bg-zinc-900 rounded-[56px] overflow-hidden shadow-2xl border-8 border-white group">
+                {isVisualizing ? (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center p-12 text-center bg-black/20 backdrop-blur-xl">
+                     <div className="w-20 h-20 border-2 border-[#26A69A] border-t-transparent rounded-full animate-spin mb-10" />
+                     <p className="text-[10px] font-black text-white uppercase tracking-[4px]">{VISUALIZATION_STEPS[suitabilityIndex].label}</p>
+                  </div>
+                ) : activeVisualization?.visualizedImage ? (
+                  <div className="w-full h-full relative animate-in fade-in duration-1000">
+                    <img src={activeVisualization.visualizedImage} alt="Reality Result" className="w-full h-full object-cover" />
+                    <button onClick={handleDownload} className="absolute top-8 right-8 p-4 bg-white text-zinc-900 rounded-2xl shadow-2xl active:scale-90 transition-transform"><Download className="w-5 h-5" /></button>
+                  </div>
+                ) : (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center p-12 text-center space-y-8 overflow-hidden">
+                     {/* Enhanced Background with Curated Outfits blurred in mosaic */}
+                     <div className="absolute inset-0 z-0">
+                        {activeSuggestion && <OutfitPreviewComposite items={activeSuggestion.items} blurred={true} />}
+                        <div className="absolute inset-0 bg-zinc-950/40 backdrop-blur-sm" />
+                     </div>
+                     
+                     <div className="relative z-10 flex flex-col items-center space-y-8 w-full animate-in zoom-in-95 duration-700">
+                        <div className="p-6 bg-white/10 backdrop-blur-md rounded-[32px] border border-white/5 shadow-2xl">
+                           <Wand2 className="w-10 h-10 text-teal-100" />
+                        </div>
+                        <button
+                           onClick={() => activeSuggestion && onSelectOutfit(activeSuggestion)}
+                           className="w-full py-6 bg-[#26A69A] text-white rounded-[32px] font-black uppercase tracking-widest text-[11px] shadow-[0_12px_48px_-12px_rgba(38,166,154,0.5)] active:scale-95 transition-all hover:bg-[#208a80] animate-bounce-subtle"
+                         >Simulate Reality</button>
+                      </div>
+                  </div>
+                )}
+              </div>
+
+              {/* 4. ENSEMBLE INTELLIGENCE & EDITORIAL COMMENT */}
+              {activeSuggestion && (
+                <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-700">
+                  <div className="flex flex-col space-y-4 px-2">
+                     <h2 className="text-4xl font-black text-gray-900 uppercase tracking-tight leading-[0.9]">{activeSuggestion.name}</h2>
+                     <div className="flex items-center space-x-3">
+                        <span className="px-3 py-1 bg-[#26A69A]/10 text-[#26A69A] rounded-lg text-[10px] font-black uppercase tracking-widest">
+                           {activeSuggestion.items.length} PIECES
+                        </span>
+                        <div className="w-1.5 h-1.5 bg-gray-100 rounded-full" />
+                        <span className="text-[10px] font-black text-gray-300 uppercase tracking-[3px]">
+                           IDENTITY PROTECTED
+                        </span>
+                     </div>
+                  </div>
+
+                  <div className="relative px-2">
+                    <Quote className="absolute -top-2 -left-1 w-8 h-8 text-gray-50 opacity-20 -z-10" />
+                    <p className="text-sm text-gray-500 leading-relaxed font-medium italic border-l-[3px] border-teal-50 pl-6 py-1">
+                       {activeSuggestion.stylistNotes}
+                    </p>
+                  </div>
+
+                  <div className="space-y-5 pt-4">
+                    <div className="flex items-center space-x-3 px-2">
+                       <Box className="w-4 h-4 text-[#26A69A]" />
+                       <p className="text-[10px] font-black text-gray-400 uppercase tracking-[4px]">{t('ensemble_breakdown', lang)}</p>
+                    </div>
+                    <div className="flex space-x-5 overflow-x-auto no-scrollbar pb-4 px-2">
+                      {activeSuggestion.items.map((item) => (
+                        <div 
+                          key={item.id} 
+                          onClick={() => onItemClick?.(item)}
+                          className="flex-shrink-0 w-36 bg-white rounded-[40px] p-2.5 border border-gray-50 shadow-sm cursor-pointer active:scale-95 transition-all group/item"
+                        >
+                          <div className="aspect-[4/5] rounded-[32px] overflow-hidden bg-gray-50 mb-3">
+                            <img src={item.imageUrl} className="w-full h-full object-cover group-hover/item:scale-110 transition-transform duration-1000" alt={item.name} />
+                          </div>
+                          <p className="text-[10px] font-bold text-gray-800 truncate px-2 uppercase tracking-tighter text-center">{item.name}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+           <div className="py-24 flex flex-col items-center justify-center text-center space-y-12">
+              <div className="space-y-4">
+                <div className="w-20 h-20 bg-gray-50 rounded-[32px] flex items-center justify-center mx-auto mb-4">
+                  <Sparkle className="w-8 h-8 text-gray-200" />
+                </div>
+                <h3 className="text-xl font-black text-gray-900 uppercase tracking-tight mb-2">Initialize Stylist</h3>
+                <p className="text-xs text-gray-400 font-medium px-8 leading-relaxed">Choose an objective above to simulate your archival collection.</p>
+              </div>
+
+              {selectedOccasion && (
+                <button
+                  onClick={() => onGenerate(selectedOccasion)}
+                  className="w-full max-w-[280px] py-6 bg-zinc-900 text-white rounded-[32px] shadow-2xl active:scale-95 transition-all flex items-center justify-center space-x-4 mx-auto"
+                >
+                  <Wand2 className="w-4 h-4" />
+                  <span className="text-[11px] font-black uppercase tracking-[3px]">Generate {selectedOccasion} Edits</span>
+                </button>
+              )}
+           </div>
+        )}
+      </div>
+
+      {/* Delete Confirmation Modal */}
+      {pendingDeleteId && (
+        <div className="fixed inset-0 z-[500] flex items-center justify-center p-8 bg-black/80 backdrop-blur-xl animate-in fade-in">
+          <div className="bg-white w-full max-w-[320px] rounded-[64px] p-12 text-center shadow-2xl scale-in duration-300">
+             <div className="w-24 h-24 bg-red-50 rounded-full flex items-center justify-center mb-10 mx-auto">
+               <Trash2 className="w-10 h-10 text-red-400" />
+             </div>
+             <h3 className="text-2xl font-black text-gray-900 uppercase tracking-tight mb-4">Retire Ensemble?</h3>
+             <p className="text-[13px] text-gray-500 font-medium leading-relaxed mb-12 px-4">This combination will be permanently removed from your curated collection.</p>
+             <div className="w-full space-y-4">
+                <button onClick={() => { onDeleteSuggestion?.(pendingDeleteId); setPendingDeleteId(null); }} className="w-full py-6 bg-red-500 text-white font-black uppercase tracking-widest text-[11px] rounded-[28px] shadow-xl">Confirm Retirement</button>
+                <button onClick={() => setPendingDeleteId(null)} className="w-full py-4 text-gray-400 font-black uppercase tracking-widest text-[10px]">Keep in Archive</button>
+             </div>
+          </div>
+        </div>
+      )}
+
       <style>{`
-        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #E5E5E5; border-radius: 10px; }
+        .scale-in { animation: scale-in 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); }
+        @keyframes scale-in { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        
+        @keyframes bounce-subtle {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-5px); }
+        }
+        .animate-bounce-subtle {
+          animation: bounce-subtle 3s infinite ease-in-out;
+        }
       `}</style>
     </div>
   );
 };
 
-export default UserManualModal;
+export default OutfitsView;
