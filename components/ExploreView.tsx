@@ -278,20 +278,18 @@ const ExploreView: React.FC<ExploreViewProps> = ({ lang = 'en', profile, items =
         </div>
       </section>
 
-      {/* History Track */}
-      <section className="space-y-8 pt-12 border-t border-zinc-100">
-         <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-               <History className="w-5 h-5 text-zinc-900" />
-               <h3 className="text-xs font-black text-zinc-900 uppercase tracking-[5px]">Lab History</h3>
-            </div>
-            {lastProcessedImage && (
-               <button onClick={clearArchive} className="text-[10px] font-black text-zinc-300 uppercase tracking-widest hover:text-red-500 transition-colors">Wipe Memory</button>
-            )}
-         </div>
+      {/* History Track - Conditionally displayed based on content */}
+      {lastProcessedImage && (
+        <section className="space-y-8 pt-12 border-t border-zinc-100 animate-in fade-in slide-in-from-bottom-4 duration-700">
+           <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-4">
+                 <History className="w-5 h-5 text-zinc-900" />
+                 <h3 className="text-xs font-black text-zinc-900 uppercase tracking-[5px]">Lab History</h3>
+              </div>
+              <button onClick={clearArchive} className="text-[10px] font-black text-zinc-300 uppercase tracking-widest hover:text-red-500 transition-colors">Wipe Memory</button>
+           </div>
 
-         {lastProcessedImage ? (
-           <div className="group relative aspect-[3/4] bg-white rounded-[80px] overflow-hidden shadow-[0_40px_100px_-20px_rgba(0,0,0,0.15)] border-[16px] border-white animate-in zoom-in duration-1000">
+           <div className="group relative aspect-[3/4] bg-white rounded-[80px] overflow-hidden shadow-[0_40px_100px_-20px_rgba(0,0,0,0.15)] border-[16px] border-white transition-all duration-700">
               <img src={lastProcessedImage} className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-105" />
               <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent flex flex-col justify-end p-12 opacity-0 group-hover:opacity-100 transition-all duration-500">
                  <div className="space-y-6">
@@ -306,18 +304,8 @@ const ExploreView: React.FC<ExploreViewProps> = ({ lang = 'en', profile, items =
                  </div>
               </div>
            </div>
-         ) : (
-           <div className="aspect-[3/4] bg-white rounded-[80px] border-2 border-dashed border-zinc-100 flex flex-col items-center justify-center p-16 text-center shadow-inner">
-              <div className="p-8 bg-zinc-50 rounded-[40px] mb-8">
-                <ImageIcon className="w-16 h-16 text-zinc-200" />
-              </div>
-              <h4 className="text-2xl font-black text-zinc-900 uppercase tracking-tight">Archive Empty</h4>
-              <p className="text-[11px] text-zinc-400 font-bold uppercase tracking-widest mt-4 leading-relaxed px-10">
-                Run a studio pass to start building your editorial portfolio.
-              </p>
-           </div>
-         )}
-      </section>
+        </section>
+      )}
 
       {/* Immersive Lab Studio Modal */}
       {activeTool && (
