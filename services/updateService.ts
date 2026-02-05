@@ -1,109 +1,95 @@
-
 import { Capacitor } from '@capacitor/core';
 import { App } from '@capacitor/app';
+import { AppUpdate, AppUpdateAvailability } from '@capawesome/capacitor-app-update';
 
 interface VersionInfo {
   version: string;
   build: string;
 }
 
-interface RemoteVersionInfo {
-  latestVersion: string;
-  minVersion: string;
-  updateUrl?: {
-    ios: string;
-    android: string;
-  };
-}
-
-// Configuration
-// In a real production app, this URL should point to a JSON file hosted on your web server
-// Example JSON content: { "latestVersion": "1.2.0", "minVersion": "1.0.0", "updateUrl": { "android": "market://...", "ios": "itms-apps://..." } }
-const REMOTE_VERSION_URL = 'https://glamai-app-assets.vercel.app/version.json';
-
-// Placeholder store URLs - Replace these with your actual App Store / Play Store IDs
+// Store URLs for fallback
 const STORE_URLS = {
-  android: 'market://details?id=com.glamai.app',
+  android: 'https://play.google.com/store/apps/details?id=com.glamai',
   ios: 'itms-apps://itunes.apple.com/app/id123456789'
 };
 
 /**
- * Compares two semantic version strings (e.g., "1.0.0" vs "1.0.1")
- * Returns:
- *  1 if v1 > v2
- * -1 if v1 < v2
- *  0 if v1 === v2
+ * Retrieves the current app version information.
  */
-const compareVersions = (v1: string, v2: string): number => {
-  const parts1 = v1.split('.').map(Number);
-  const parts2 = v2.split('.').map(Number);
-  
-  for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
-    const p1 = parts1[i] || 0;
-    const p2 = parts2[i] || 0;
-    if (p1 > p2) return 1;
-    if (p1 < p2) return -1;
-  }
-  return 0;
-};
-
 export const getAppVersion = async (): Promise<VersionInfo> => {
   if (!Capacitor.isNativePlatform()) {
     return { version: 'Web', build: '0' };
   }
-  return await App.getInfo();
+  try {
+    const info = await App.getInfo();
+    return info || { version: '1.0.0', build: '8' };
+  } catch (e) {
+    return { version: '1.0.0', build: '8' };
+  }
 };
 
+/**
+ * Checks if a newer version of the app is available in the store.
+ * Uses the @capawesome/capacitor-app-update plugin for native integration.
+ */
 export const checkForAppUpdate = async (): Promise<{ hasUpdate: boolean, storeUrl: string, latestVersion: string } | null> => {
   if (!Capacitor.isNativePlatform()) return null;
 
   try {
-    // 1. Get current installed version
-    const appInfo = await App.getInfo();
-    const currentVersion = appInfo.version;
+    // Queries the platform-specific store (Play Store/App Store)
+    const result = await AppUpdate.getAppUpdateInfo();
 
-    // 2. Fetch remote version info
-    // Note: We use a timeout to prevent hanging if the user is offline or server is down
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000);
-    
-    // MOCKING THE FETCH FOR DEMONSTRATION 
-    // In a real scenario, you would uncomment the fetch line below:
-    // const response = await fetch(REMOTE_VERSION_URL, { signal: controller.signal });
-    // const remoteData: RemoteVersionInfo = await response.json();
-    
-    // MOCK DATA: Simulating a scenario where a newer version exists
-    // Change 'latestVersion' to test the UI
-    const remoteData: RemoteVersionInfo = {
-       latestVersion: currentVersion, // Set to higher than current to test (e.g., "9.9.9")
-       minVersion: "1.0.0",
-       updateUrl: STORE_URLS
+    /**
+     * updateAvailability enum from plugin:
+     * UNKNOWN = 0
+     * UPDATE_NOT_AVAILABLE = 1
+     * UPDATE_AVAILABLE = 2
+     * UPDATE_IN_PROGRESS = 3
+     */
+    const hasUpdate = result.updateAvailability === AppUpdateAvailability.UPDATE_AVAILABLE;
+
+    const platform = Capacitor.getPlatform();
+    const fallbackUrl = platform === 'ios' ? STORE_URLS.ios : STORE_URLS.android;
+
+    return {
+      hasUpdate,
+      storeUrl: fallbackUrl, // On Android, we can actually trigger the native dialog instead of a URL
+      latestVersion: result.availableVersionName || 'New Version'
     };
 
-    clearTimeout(timeoutId);
-
-    // 3. Compare
-    if (compareVersions(remoteData.latestVersion, currentVersion) > 0) {
-      const platform = Capacitor.getPlatform();
-      const url = platform === 'ios' 
-        ? (remoteData.updateUrl?.ios || STORE_URLS.ios)
-        : (remoteData.updateUrl?.android || STORE_URLS.android);
-        
-      return {
-        hasUpdate: true,
-        storeUrl: url,
-        latestVersion: remoteData.latestVersion
-      };
-    }
-
-    return { hasUpdate: false, storeUrl: '', latestVersion: currentVersion };
-
   } catch (error) {
-    console.warn("Update check failed:", error);
+    console.warn("Boutique update check failed:", error);
     return null;
   }
 };
 
-export const openStore = (url: string) => {
-  window.location.href = url;
+/**
+ * Opens the app store or starts the update process.
+ */
+export const openStore = async (url: string) => {
+  if (Capacitor.isNativePlatform()) {
+    try {
+      // On Android, this triggers the native In-App Update flow
+      // On iOS, this usually opens the App Store
+      await AppUpdate.openAppStore();
+    } catch (e) {
+      // Fallback to manual URL if native trigger fails
+      if (url) window.location.href = url;
+    }
+  } else if (url) {
+    window.location.href = url;
+  }
+};
+
+/**
+ * Specifically for Android: Triggers an immediate in-app update if available.
+ */
+export const performImmediateUpdate = async () => {
+  if (Capacitor.getPlatform() === 'android') {
+    try {
+      await AppUpdate.performImmediateUpdate();
+    } catch (e) {
+      console.error("Immediate update failed:", e);
+    }
+  }
 };
