@@ -81,14 +81,11 @@ const BoutiqueLoader: React.FC<{ progress: { loaded: number, total: number, phas
   }, []);
 
   useEffect(() => {
-    console.log("Attempting to hide splash screen..."); // <--- AND THIS
-    
     const hide = async () => {
       await SplashScreen.hide();
-      console.log("Splash screen hidden command sent");
     };
     
-    hide();
+    setInterval(() => hide(), 500);
   }, []);
 
   let progressPercent = 0;

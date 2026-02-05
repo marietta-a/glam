@@ -1,8 +1,8 @@
-
 import React, { useEffect, useState } from 'react';
 import { Download, X, Sparkles, Smartphone, ShieldCheck } from 'lucide-react';
-import { checkForAppUpdate, openStore } from '../services/updateService';
+import { checkForAppUpdate, openStore, performImmediateUpdate } from '../services/updateService';
 import { t } from '../services/i18n';
+import { Capacitor } from '@capacitor/core';
 
 interface UpdatePromptProps {
   lang?: string;
@@ -22,14 +22,18 @@ const UpdatePrompt: React.FC<UpdatePromptProps> = ({ lang = 'en' }) => {
       }
     };
     
-    // Slight delay to not block initial render animation
-    const timer = setTimeout(check, 2000);
+    // Slight delay to not block initial render animation or splash screen transition
+    const timer = setTimeout(check, 2500);
     return () => clearTimeout(timer);
   }, []);
 
-  const handleUpdate = () => {
-    if (updateInfo?.storeUrl) {
-      openStore(updateInfo.storeUrl);
+  const handleUpdate = async () => {
+    if (Capacitor.getPlatform() === 'android') {
+       // Try native immediate update first for Android
+       await performImmediateUpdate();
+       setShowModal(false);
+    } else if (updateInfo?.storeUrl) {
+      await openStore(updateInfo.storeUrl);
       setShowModal(false);
     }
   };
@@ -68,7 +72,7 @@ const UpdatePrompt: React.FC<UpdatePromptProps> = ({ lang = 'en' }) => {
               <div className="bg-gray-50 rounded-[32px] p-6 border border-gray-100 flex items-center justify-between">
                  <div className="flex items-center space-x-3">
                     <Smartphone className="w-5 h-5 text-gray-400" />
-                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Optimized for iOS/Android</span>
+                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Store Verified Protocol</span>
                  </div>
                  <ShieldCheck className="w-4 h-4 text-[#26A69A]" />
               </div>
