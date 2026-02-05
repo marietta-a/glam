@@ -56,6 +56,7 @@ import AdBanner from './components/AdBanner';
 import UpdatePrompt from './components/UpdatePrompt';
 import NetworkErrorModal from './components/NetworkErrorModal';
 import { t } from './services/i18n';
+import { SplashScreen } from '@capacitor/splash-screen';
 
 // Restrict to sequential processing for archival integrity during credit updates
 const limit = pLimit(1);
@@ -77,6 +78,17 @@ const BoutiqueLoader: React.FC<{ progress: { loaded: number, total: number, phas
 
     const imgInterval = setInterval(() => setImgIndex(i => (i + 1) % BOUTIQUE_LOADER_IMAGES.length), 5000);
     return () => clearInterval(imgInterval);
+  }, []);
+
+  useEffect(() => {
+    console.log("Attempting to hide splash screen..."); // <--- AND THIS
+    
+    const hide = async () => {
+      await SplashScreen.hide();
+      console.log("Splash screen hidden command sent");
+    };
+    
+    hide();
   }, []);
 
   let progressPercent = 0;
