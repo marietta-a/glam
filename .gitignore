@@ -28,16 +28,26 @@ dist-ssr
 .env
 .env.*
 
-# Android release build outputs
-android/app/release/
-android/app/release/baselineProfiles/
+# Android build outputs
+android/app/release/*
+android/app/release/baselineProfiles/*
 android/app/release/output-metadata.json
-android/app/release/baselineProfiles/0/app-release.dm
-
-# Android debug build outputs
-android/app/debug/
-android/app/build/
-android/build/
+android/app/release/baselineProfiles/0/*
+android/app/debug/*
+android/app/build/*
+android/build/*
 *.apk
 *.aab
 *.keystore
+*.jks
+
+# iOS build outputs (Capacitor)
+ios/App/build/
+ios/App/Pods/
+ios/App/*.xcworkspace
+
+# Gradle
+.gradle/
+
+# Test coverage
+coverage/

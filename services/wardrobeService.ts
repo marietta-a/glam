@@ -46,11 +46,13 @@ export const uploadWardrobeImage = async (userId: string, itemId: string, base64
 
   if (uploadError) throw uploadError;
 
-  const { data: { signedUrl }, error } = await supabase.storage
+  const { data, error } = await supabase.storage
     .from('glamorous')
     .createSignedUrl(filePath, 31536000); 
 
   if(error) throw error;
+  
+  const signedUrl = data?.signedUrl;
   
   if (itemId === 'avatar') {
     localStorage.setItem('glam_last_avatar', signedUrl);
@@ -301,40 +303,9 @@ export const deleteOutfitSuggestion = async (userId: string, suggestionId: strin
 export const saveOutfitSuggestions = async (
   userId: string, 
   occasion: string, 
-  suggestions: Omit<Outfit, 'id'>[],
-  allWardrobeItems: WardrobeItem[]
+  suggestions: Omit<Outfit, 'id'>[]
 ): Promise<OutfitSuggestion[]> => {
-  // 1. Identify existing suggestions for this user & occasion
-  const { data: existingSuggestions } = await supabase
-    .from('outfit_suggestions')
-    .select('suggestion_id')
-    .eq('user_id', userId)
-    .eq('occasion', occasion);
-
-  if (existingSuggestions && existingSuggestions.length > 0) {
-    const existingIds = existingSuggestions.map(s => s.suggestion_id);
-
-    // 2. Determine which suggestions have been visualized (cached)
-    // We only want to keep the visualized ones.
-    const { data: visualized } = await supabase
-      .from('visualized_outfits')
-      .select('suggestion_id')
-      .in('suggestion_id', existingIds);
-
-    const visualizedIds = new Set(visualized?.map(v => v.suggestion_id) || []);
-
-    // 3. Delete non-visualized suggestions to clear clutter before adding new ones
-    const idsToDelete = existingIds.filter(id => !visualizedIds.has(id));
-
-    if (idsToDelete.length > 0) {
-      await supabase
-        .from('outfit_suggestions')
-        .delete()
-        .in('suggestion_id', idsToDelete);
-    }
-  }
-
-  // 4. Insert new suggestions
+  // Additive logic: Do not clear old suggestions. User deletes them manually now.
   const dbRows = suggestions.map(s => ({
     user_id: userId,
     occasion: occasion,
@@ -344,15 +315,20 @@ export const saveOutfitSuggestions = async (
     expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
   }));
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('outfit_suggestions')
-    .insert(dbRows);
+    .insert(dbRows)
+    .select();
 
   if (error) throw error;
 
-  // 5. Fetch and return the COMPLETE updated list (Preserved Visualized + New)
-  // We perform a fresh fetch to ensure UI is 100% in sync with DB state
-  return await fetchOutfitSuggestions(userId, occasion, allWardrobeItems);
+  return data.map((row, index) => ({
+    id: row.suggestion_id,
+    name: row.outfit_name,
+    stylistNotes: row.stylist_notes,
+    occasion: row.occasion as Occasion,
+    items: suggestions[index].items
+  }));
 };
 
 // --- OUTFIT VISUALIZATION CACHE (STEP 2: IMAGE GENERATION) ---
