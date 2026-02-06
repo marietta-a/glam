@@ -149,20 +149,26 @@ export const suggestOutfits = async (
 ): Promise<{ outfits: Outfit[], noMoreCombinations: boolean }> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
-  // SPEED OPTIMIZATION: Extremely compressed item text to minimize token processing
-  const itemsText = items.slice(0, 200)
-  .map(i => `${i.id}|${i.name.slice(0, 15)}|${i.category}|${i.primaryColor || ''}`)
-  .join('\n');
+  const itemsText = items.slice(0, 400)
+    .map(i => `${i.id}:${i.category}:${i.name.slice(0,25).replace(/:/g, '')}:${i.primaryColor || ''}`)
+    .join('|');
 
+  const systemInstruction = `Role: Elite Stylist. 
+Objective: Curate 5-8 outfits for "${occasion}".
 
-  const systemInstruction = `Role: Elite Stylist. JSON output only.
-Task: Design 5-10 outfits for "${occasion}" using the ARCHIVE.
-Logic: Dress/Gown = 1 piece. Top+Bottom = Ensemble. Add Access/Shoes/Bags.
-Output: { options: [{ name, itemIds: [string], stylistNotes }], noMoreCombinations: boolean }`;
+STRICT COUTURE PAIRING RULES:
+1. MANDATORY FOOTWEAR: Every outfit MUST include a pair of Shoes.
+2. DRESS OUTFIT: 1 Dress + 1 Pair of Shoes is a VALID, COMPLETE outfit. Do not add a top/bottom to a dress unless for layering.
+3. SEPARATES: 1 Top + 1 Bottom + 1 Pair of Shoes.
+4. ACCESSORIES: Complementary items only.
+
+${isUniversal ? "CREATIVE MODE: Ignore occasion tags. Create the most visually stunning combinations from the entire archive." : "OCCASION FOCUS: Items are already pre-filtered for suitability."}
+
+JSON OUTPUT ONLY: { options: [{ name, itemIds: [string], stylistNotes }], noMoreCombinations: boolean }`;
 
   const response = await ai.models.generateContent({
-    model: 'gemini-2.5-flash-lite', 
-    contents: `ARCHIVE:\n${itemsText}\n\nAVOID:\n${avoidCombinations.join('\n')}`,
+    model: 'gemini-flash-lite-latest', 
+    contents: `ARCHIVE:${itemsText}\nAVOID:${avoidCombinations.join(',')}`,
     config: {
       systemInstruction,
       responseMimeType: "application/json",
@@ -188,16 +194,34 @@ Output: { options: [{ name, itemIds: [string], stylistNotes }], noMoreCombinatio
     }
   });
 
-  const result = parseSafeJson(response.text) || { options: [], noMoreCombinations: false };
+  const result = parseSafeJson(response.text || '') || { options: [], noMoreCombinations: false };
+  
+  const validatedOutfits = (result.options || []).map((opt: any) => {
+    const foundItems = (opt.itemIds || [])
+      .map((id: string) => items.find(item => item.id === id))
+      .filter(Boolean) as WardrobeItem[];
+    
+    // Core check: Must have shoes and (Dress OR (Top + Bottom))
+    const hasShoes = foundItems.some(i => i.category === 'Shoes');
+    const hasDress = foundItems.some(i => i.category === 'Dresses');
+    const hasTop = foundItems.some(i => i.category === 'Tops');
+    const hasBottom = foundItems.some(i => i.category === 'Bottoms');
+    
+    if (hasShoes && (hasDress || (hasTop && hasBottom))) {
+      return {
+        id: Math.random().toString(36).substr(2, 9),
+        name: opt.name,
+        items: foundItems,
+        stylistNotes: opt.stylistNotes,
+        occasion
+      };
+    }
+    return null;
+  }).filter(Boolean) as Outfit[];
+
   return { 
-    outfits: (result.options || []).map((opt: any) => ({
-      id: Math.random().toString(36).substr(2, 9),
-      name: opt.name,
-      items: (opt.itemIds || []).map((id: string) => items.find(item => item.id === id)).filter(Boolean) as WardrobeItem[],
-      stylistNotes: opt.stylistNotes,
-      occasion
-    })),
-    noMoreCombinations: result.noMoreCombinations 
+    outfits: validatedOutfits,
+    noMoreCombinations: result.noMoreCombinations || (validatedOutfits.length === 0 && items.length > 0)
   };
 };
 
@@ -363,7 +387,7 @@ export const analyzeUpload = async (base64Image: string, lang: string = 'en'): P
       }
     }
   });
-  const result = parseSafeJson(response.text) || { items: [] };
+  const result = parseSafeJson(response.text || '') || { items: [] };
   return result.items;
 };
 

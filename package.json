@@ -17,6 +17,7 @@
     "@capacitor/splash-screen": "^8.0.0",
     "@capawesome/capacitor-app-update": "^8.0.2",
     "@google/genai": "^1.35.0",
+    "@revenuecat/purchases-capacitor": "^12.1.1",
     "@supabase/supabase-js": "^2.45.0",
     "install": "^0.13.0",
     "lucide-react": "^0.562.0",
@@ -28,6 +29,7 @@
   "devDependencies": {
     "@capacitor/cli": "^8.0.2",
     "@types/node": "^22.14.0",
+    "@types/react": "^19.2.13",
     "@vitejs/plugin-react": "^5.0.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.0"

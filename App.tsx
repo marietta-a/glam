@@ -33,7 +33,8 @@ import {
   getBase64Data,
   isItemSuitableForOccasion
 } from './services/geminiService';
-import { CloudSync, RefreshCw } from 'lucide-react';
+import { initRevenueCat, getActiveEntitlements } from './services/purchaseService';
+import { CloudSync, RefreshCw, Box, Sparkles, Wand2 } from 'lucide-react';
 import Header from './components/Header';
 import Tabs from './components/Tabs';
 import ItemCard from './components/ItemCard';
@@ -57,8 +58,8 @@ import UpdatePrompt from './components/UpdatePrompt';
 import NetworkErrorModal from './components/NetworkErrorModal';
 import { t } from './services/i18n';
 import { SplashScreen } from '@capacitor/splash-screen';
+import { PurchasesPackage } from '@revenuecat/purchases-capacitor';
 
-// Restrict to sequential processing for archival integrity during credit updates
 const limit = pLimit(1);
 
 const BoutiqueLoader: React.FC<{ progress: { loaded: number, total: number, phase: number } }> = ({ progress }) => {
@@ -70,7 +71,6 @@ const BoutiqueLoader: React.FC<{ progress: { loaded: number, total: number, phas
   ];
 
   useEffect(() => {
-    // Preload images to prevent black screen on mobile load
     BOUTIQUE_LOADER_IMAGES.forEach(item => {
       const img = new Image();
       img.src = item.url;
@@ -82,10 +82,10 @@ const BoutiqueLoader: React.FC<{ progress: { loaded: number, total: number, phas
 
   useEffect(() => {
     const hide = async () => {
-      await SplashScreen.hide();
+      try { await SplashScreen.hide(); } catch (e) {}
     };
-    
-    setInterval(() => hide(), 500);
+    const timer = setTimeout(hide, 1000);
+    return () => clearTimeout(timer);
   }, []);
 
   let progressPercent = 0;
@@ -123,7 +123,6 @@ const BoutiqueLoader: React.FC<{ progress: { loaded: number, total: number, phas
               alt="Slideshow" 
               loading="eager"
             />
-            {/* Consistent Overlay matching Auth screen */}
             <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" />
           </div>
         ))}
@@ -149,18 +148,22 @@ const App: React.FC = () => {
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<UserProfile | null>(store.profile);
   const [lastKnownAvatar, setLastKnownAvatar] = useState<string | null>(localStorage.getItem('glam_last_avatar'));
-  const [items, setItems] = useState<WardrobeItem[]>(store.items);
+  const [items, setItems] = useState<WardrobeItem[]>(store.items || []);
   const [activeTab, setActiveTab] = useState<Category>('All Items');
   const [activeView, setActiveView] = useState<ViewType>('wardrobe');
   const [loading, setLoading] = useState(!store.isHydrated);
-  const [initProgress, setInitProgress] = useState({ loaded: store.items.length, total: store.items.length, phase: store.isHydrated ? 4 : 0 });
+  const [initProgress, setInitProgress] = useState({ 
+    loaded: store.items?.length || 0, 
+    total: store.items?.length || 0, 
+    phase: store.isHydrated ? 4 : 0 
+  });
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isAddItemOpen, setIsAddItemOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isManualOpen, setIsManualOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<WardrobeItem | null>(null);
-  const [outfitCache, setOutfitCache] = useState<OutfitCache>(store.outfitCache);
+  const [outfitCache, setOutfitCache] = useState<OutfitCache>(store.outfitCache || {});
   const [selectedOccasion, setSelectedOccasion] = useState<Occasion | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isVisualizing, setIsVisualizing] = useState(false);
@@ -168,60 +171,28 @@ const App: React.FC = () => {
   const [uploadTasks, setUploadTasks] = useState<UploadTask[]>([]);
   const [isAnalyzingFace, setIsAnalyzingFace] = useState(false);
   const [showSuitabilityModal, setShowSuitabilityModal] = useState(false);
-  const [modalType, setModalType] = useState<'mismatch' | 'exhausted'>('mismatch');
+  const [modalType, setModalType] = useState<'mismatch' | 'exhausted' | 'incomplete'>('mismatch');
   const [pendingOccasion, setPendingOccasion] = useState<Occasion | null>(null);
   const [isPaywallOpen, setIsPaywallOpen] = useState(false);
   const [showUploadTooltip, setShowUploadTooltip] = useState(false);
   const [suggestedOutfits, setSuggestedOutfits] = useState<OutfitSuggestion[]>([]);
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
   const [generationMetadata, setGenerationMetadata] = useState<Record<string, { countAtGeneration: number }>>(() => {
-    const saved = localStorage.getItem('glam_gen_metadata');
-    return saved ? JSON.parse(saved) : {};
+    try {
+      const saved = localStorage.getItem('glam_gen_metadata');
+      return saved ? JSON.parse(saved) : {};
+    } catch (e) { return {}; }
   });
 
   const mainScrollRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
-    // Network Middleware Logic
-    const handleStatusChange = () => {
-      setIsOffline(!navigator.onLine);
-    };
-
+    const handleStatusChange = () => setIsOffline(!navigator.onLine);
     window.addEventListener('online', handleStatusChange);
     window.addEventListener('offline', handleStatusChange);
-
-    const originalFetch = window.fetch;
-    
-    // Fix: Wrap fetch override in try/catch to handle read-only environments
-    try {
-        window.fetch = async (...args) => {
-          if (!navigator.onLine) {
-            setIsOffline(true);
-            return Promise.reject(new TypeError('OFFLINE_MODE'));
-          }
-          
-          try {
-            const response = await originalFetch(...args);
-            return response;
-          } catch (error) {
-            if (!navigator.onLine) {
-               setIsOffline(true);
-            }
-            throw error;
-          }
-        };
-    } catch (e) {
-        console.warn("Could not patch window.fetch, falling back to event listeners only.", e);
-    }
-
     return () => {
       window.removeEventListener('online', handleStatusChange);
       window.removeEventListener('offline', handleStatusChange);
-      try {
-          window.fetch = originalFetch;
-      } catch (e) {
-          // ignore cleanup errors for fetch
-      }
     };
   }, []);
 
@@ -247,15 +218,24 @@ const App: React.FC = () => {
       const initLoad = async () => {
         setInitProgress({ loaded: 0, total: 0, phase: 1 });
         try {
+          // Initialize RevenueCat early
+          await initRevenueCat(user.id);
+          const entitlements = await getActiveEntitlements();
+          const hasEliteAccess = entitlements.includes('premium') || entitlements.includes('elite');
+
           let up = await fetchUserProfile(user.id);
           if (!up) { 
             await createUserProfile({ id: user.id, username: user.email?.split('@')[0] || 'Member', email: user.email!, language: 'en' }); 
             up = await fetchUserProfile(user.id); 
           }
-
-          // Check for daily reset immediately upon load
+          
           if (up) {
             up = await checkAndResetDailyLimits(up);
+            // Sync RevenueCat state to local profile if there's a mismatch
+            if (up.is_premium !== hasEliteAccess) {
+              up.is_premium = hasEliteAccess;
+              await updateUserProfile({ id: up.id, is_premium: hasEliteAccess });
+            }
           }
 
           setProfile(up); 
@@ -274,31 +254,31 @@ const App: React.FC = () => {
           setItems(allItems); 
           store.updateItems(allItems);
 
-          // Phase 3: Synchronizing Metadata
           setInitProgress(prev => ({ ...prev, phase: 3 }));
           const cache = await fetchOutfitCache(user.id, allItems);
-          setOutfitCache(cache); 
-          store.updateCache(cache);
+          setOutfitCache(cache || {}); 
+          store.updateCache(cache || {});
 
           const suggestions = await fetchAllOutfitSuggestions(user.id, allItems);
-          store.updateSuggestions(suggestions);
+          store.updateSuggestions(suggestions || {});
 
-          // Synchronize generation metadata for occasions that already have suggestions
-          setGenerationMetadata(prev => {
-            const newMeta = { ...prev };
-            Object.keys(suggestions).forEach(occ => {
-              if (!newMeta[occ]) {
-                const count = allItems.filter(i => isItemSuitableForOccasion(i, occ as Occasion)).length;
-                newMeta[occ] = { countAtGeneration: count };
-              }
+          if (suggestions) {
+            setGenerationMetadata(prev => {
+              const newMeta = { ...prev };
+              Object.keys(suggestions).forEach(occ => {
+                if (!newMeta[occ]) {
+                  const count = allItems.filter(i => isItemSuitableForOccasion(i, occ as Occasion)).length;
+                  newMeta[occ] = { countAtGeneration: count };
+                }
+              });
+              return newMeta;
             });
-            return newMeta;
-          });
+          }
 
           const firstOcc = ORDERED_OCCASIONS.find(occ => allItems.some(item => isItemSuitableForOccasion(item, occ)));
           if (firstOcc) {
             setSelectedOccasion(firstOcc);
-            const initialSugg = suggestions[firstOcc] || [];
+            const initialSugg = (suggestions && suggestions[firstOcc]) || [];
             setSuggestedOutfits(initialSugg);
           }
 
@@ -321,22 +301,21 @@ const App: React.FC = () => {
         setSuggestedOutfits(cached);
       } else {
         fetchOutfitSuggestions(user.id, selectedOccasion, items).then((suggestions) => {
-          setSuggestedOutfits(suggestions);
-          store.updateSuggestions({ ...store.suggestionCache, [selectedOccasion]: suggestions });
+          setSuggestedOutfits(suggestions || []);
+          store.updateSuggestions({ ...store.suggestionCache, [selectedOccasion]: suggestions || [] });
         });
       }
     }
-  }, [selectedOccasion, user, items.length, store.isHydrated]);
+  }, [selectedOccasion, user, items?.length, store.isHydrated]);
 
   const newItemsCount = useMemo(() => {
-    if (!selectedOccasion || suggestedOutfits.length === 0) return 0;
-    const currentCount = items.filter(i => isItemSuitableForOccasion(i, selectedOccasion)).length;
+    if (!selectedOccasion || !suggestedOutfits || suggestedOutfits.length === 0) return 0;
+    const currentCount = (items || []).filter(i => isItemSuitableForOccasion(i, selectedOccasion)).length;
     const meta = generationMetadata[selectedOccasion];
     if (!meta) return currentCount; 
     return Math.max(0, currentCount - meta.countAtGeneration);
   }, [selectedOccasion, suggestedOutfits, items, generationMetadata]);
 
-  // Unified function to handle image generation / processing credits
   const handleUseCredit = async () => {
     if (!profile) return;
     try {
@@ -352,17 +331,27 @@ const App: React.FC = () => {
 
   const handleGenerateOptions = async (occasion: Occasion, isUniversalMode = false) => {
     if (!profile?.avatar_url) { setActiveView('outfits'); return; }
-    
-    // Check Daily Limit for Outfits (10/day) - Only if not premium AND no credits
     if (!profile.is_premium && (profile.credits || 0) === 0 && (profile.daily_outfit_count || 0) >= 10) {
       setIsPaywallOpen(true);
       return;
     }
 
-    const strictlyMatched = items.filter(i => isItemSuitableForOccasion(i, occasion));
-    if (!isUniversalMode && strictlyMatched.length < 1) {
+    const canMakeSet = (inventory: WardrobeItem[]) => {
+      const hasShoes = inventory.some(i => i.category === 'Shoes');
+      const hasTop = inventory.some(i => i.category === 'Tops');
+      const hasBottom = inventory.some(i => i.category === 'Bottoms');
+      const hasDress = inventory.some(i => i.category === 'Dresses');
+      // Set rule: Shoes + (Dress OR (Top + Bottom))
+      return hasShoes && (hasDress || (hasTop && hasBottom));
+    };
+
+    const globalArchiveComplete = canMakeSet(items || []);
+    const strictlyMatched = (items || []).filter(i => isItemSuitableForOccasion(i, occasion));
+    const occasionArchiveComplete = canMakeSet(strictlyMatched);
+
+    if (!isUniversalMode && !occasionArchiveComplete) {
       setPendingOccasion(occasion);
-      setModalType('mismatch');
+      setModalType(globalArchiveComplete ? 'mismatch' : 'incomplete');
       setShowSuitabilityModal(true);
       return;
     }
@@ -370,10 +359,8 @@ const App: React.FC = () => {
     setIsGenerating(true); setGenerationPhase('analyzing'); setShowSuitabilityModal(false);
     try {
       setGenerationPhase('designing');
-      
-      const itemsToUse = isUniversalMode ? items : strictlyMatched;
-      const existingIds = suggestedOutfits.map(s => s.items.map(i => i.id).sort().join(','));
-      
+      const itemsToUse = isUniversalMode ? (items || []) : strictlyMatched;
+      const existingIds = (suggestedOutfits || []).map(s => s.items.map(i => i.id).sort().join(','));
       const { outfits, noMoreCombinations } = await suggestOutfits(itemsToUse, occasion, profile, existingIds, isUniversalMode);
       
       if (noMoreCombinations && !isUniversalMode && outfits.length === 0) {
@@ -381,29 +368,22 @@ const App: React.FC = () => {
         setIsGenerating(false); return;
       }
 
-      // Track daily usage for outfit suggestions
       if (!profile.is_premium) {
         const updated = await trackOutfitGeneration(profile);
         setProfile(updated);
         store.updateProfile(updated);
       }
 
-      // We pass 'items' so saveOutfitSuggestions can return the full, hydrated list including visualized items
-      const freshSuggestions = await saveOutfitSuggestions(user.id, occasion, outfits, items);
-      
-      const countAtGeneration = items.filter(i => isItemSuitableForOccasion(i, occasion)).length;
+      const freshSuggestions = await saveOutfitSuggestions(user.id, occasion, outfits);
+      const countAtGeneration = (items || []).filter(i => isItemSuitableForOccasion(i, occasion)).length;
       setGenerationMetadata(prev => ({ ...prev, [occasion]: { countAtGeneration } }));
       
       setSelectedOccasion(occasion); 
-      // Replace state with the fresh list from DB (Visualized + New)
-      setSuggestedOutfits(freshSuggestions);
-      store.updateSuggestions({ ...store.suggestionCache, [occasion]: freshSuggestions });
+      setSuggestedOutfits(prev => [...prev, ...freshSuggestions]);
+      store.updateSuggestions({ ...store.suggestionCache, [occasion]: [...(suggestedOutfits || []), ...freshSuggestions] });
     } catch (e: any) { 
-      if (e.message === 'DAILY_LIMIT_REACHED_OUTFIT') {
-        setIsPaywallOpen(true);
-      } else {
-        console.error(e); 
-      }
+      if (e.message === 'DAILY_LIMIT_REACHED_OUTFIT') setIsPaywallOpen(true);
+      else console.error(e); 
     } finally { setIsGenerating(false); setGenerationPhase('complete'); }
   };
 
@@ -412,11 +392,9 @@ const App: React.FC = () => {
     try {
       await deleteOutfitSuggestion(user.id, suggestionId);
       await deleteOutfitFromCache(user.id, suggestionId);
-      
-      const updated = suggestedOutfits.filter(s => s.id !== suggestionId);
+      const updated = (suggestedOutfits || []).filter(s => s.id !== suggestionId);
       setSuggestedOutfits(updated);
       store.updateSuggestions({ ...store.suggestionCache, [selectedOccasion]: updated });
-      
       setOutfitCache(prev => {
         const next = { ...prev };
         delete next[suggestionId];
@@ -429,16 +407,12 @@ const App: React.FC = () => {
   const handleSelectOutfit = async (outfit: OutfitSuggestion, force = false) => {
     if (!profile || !selectedOccasion) return;
     if (!force && outfitCache[outfit.id]?.visualizedImage) return;
-
-    // Check Daily Limit for Image (1/day for Free) inside useGenerationCredit
     
     setIsVisualizing(true); setGenerationPhase('visualizing');
     try {
-      await handleUseCredit(); // Validates daily image limit or credits
-      
+      await handleUseCredit();
       const visualizedRaw = await visualizeOutfit(outfit, profile);
       const visualized = await compressImage(visualizedRaw, 1024, 0.75);
-      
       const newCacheItem: CachedOutfit = { id: outfit.id, outfit, visualizedImage: visualized, generatedAt: Date.now(), combinationHistory: [] };
       setOutfitCache(prev => ({ ...prev, [outfit.id]: newCacheItem }));
       store.updateCache({ ...outfitCache, [outfit.id]: newCacheItem });
@@ -446,20 +420,16 @@ const App: React.FC = () => {
     } catch (e) { console.error(e); } finally { setIsVisualizing(false); setGenerationPhase('complete'); }
   };
 
-  const handleSubscribe = async (pack: 'starter' | 'growth' | 'pro' | 'premium_monthly' | 'premium_yearly') => {
-    let amount = 0; let isSub = false;
-    if (pack === 'starter') amount = 59; else if (pack === 'growth') amount = 200; else if (pack === 'pro') amount = 500;
-    else if (pack === 'premium_monthly' || pack === 'premium_yearly') isSub = true;
-    setIsPaywallOpen(false); setLoading(true);
-    try {
-      if (profile) {
-        let updated = profile;
-        if (isSub) { updated = { ...profile, is_premium: true, credits: (profile.credits || 0) + (pack === 'premium_yearly' ? 5000 : 1000) }; await updateUserProfile(updated); }
-        else { updated = await addCredits(profile, amount); }
-        setProfile(updated); store.updateProfile(updated);
-        alert(isSub ? `Elite Membership Activated!` : `Success! ${amount} credits added.`);
-      }
-    } catch (e) { console.error(e); } finally { setLoading(false); }
+  const handlePurchaseSuccess = async (customerInfo: any) => {
+    if (!profile) return;
+    const isPremium = customerInfo.entitlements.active['premium'] !== undefined || 
+                      customerInfo.entitlements.active['elite'] !== undefined;
+    
+    const updated = { ...profile, is_premium: isPremium };
+    setProfile(updated);
+    store.updateProfile(updated);
+    await updateUserProfile(updated);
+    setIsPaywallOpen(false);
   };
 
   const handleStartUpload = async (inputs: string[]) => {
@@ -473,46 +443,34 @@ const App: React.FC = () => {
         const taskId = Math.random().toString(36).substr(2, 9);
         setUploadTasks(prev => [...prev, { id: taskId, status: 'analyzing', progress: 5, previewUrl: input }]);
         const updateTask = (updates: Partial<UploadTask>) => setUploadTasks(prev => prev.map(t => t.id === taskId ? { ...t, ...updates } : t));
-        
         try {
           updateTask({ progress: 10 }); 
           const base64 = await getBase64Data(input); 
-
-          try {
-            await handleUseCredit(); // Check image credit logic for extraction
-          } catch (creditErr: any) {
+          try { await handleUseCredit(); } catch (creditErr: any) {
             if (creditErr.message === 'OUT_OF_CREDITS') {
               updateTask({ status: 'error', errorMessage: 'Boutique credits exhausted. Refill for further archival extraction.', progress: 100 });
               return;
             }
             throw creditErr;
           }
-
           updateTask({ status: 'analyzing', progress: 20 });
           const results = await analyzeUpload(base64, profile?.language || 'en');
           if (!results || results.length === 0) throw new Error("No items detected.");
-          
           updateTask({ totalItemsInBatch: results.length, processedItemsInBatch: 0, progress: 30 });
-          
           for (let index = 0; index < results.length; index++) {
             const itemData = results[index];
             try {
-              const startProgress = 30 + (index / results.length) * 60; 
-              updateTask({ status: 'illustrating', progress: startProgress });
-              
+              updateTask({ status: 'illustrating', progress: 30 + (index / results.length) * 60 });
               const isolated = await generateItemImage(itemData, base64);
               const url = await uploadWardrobeImage(user.id, `item_${Math.random().toString(36).substr(2, 9)}`, isolated);
               const saved = await saveWardrobeItem({ ...itemData, userId: user.id, imageUrl: url, isFavorite: false });
-              
               setItems(prev => { 
-                const combined = [saved, ...prev]; 
+                const combined = [saved, ...(prev || [])]; 
                 store.updateItems(combined); 
                 return combined; 
               });
               updateTask({ processedItemsInBatch: (index + 1) });
-            } catch (e) { 
-              console.error("Garment extraction failed:", e); 
-            }
+            } catch (e) { console.error(e); }
           }
           setUploadTasks(prev => prev.filter(t => t.id !== taskId));
         } catch (err: any) { 
@@ -527,7 +485,7 @@ const App: React.FC = () => {
   if (loading) return <BoutiqueLoader progress={initProgress} />;
 
   const lang = profile?.language || 'en';
-  const filteredItems = items.filter(i => activeTab === 'All Items' || i.category === activeTab);
+  const filteredItems = (items || []).filter(i => activeTab === 'All Items' || i.category === activeTab);
   const isPremium = profile?.is_premium || false;
 
   return (
@@ -546,7 +504,7 @@ const App: React.FC = () => {
             <Tabs activeTab={activeTab} onTabChange={setActiveTab} lang={lang} />
             <div className="p-6">
               {uploadTasks.length > 0 && <SyncingWardrobe tasks={uploadTasks} lang={lang} />}
-              {items.length === 0 && uploadTasks.length === 0 ? (
+              {(items?.length === 0 || !items) && uploadTasks.length === 0 ? (
                 <EmptyWardrobe onAdd={() => setIsAddItemOpen(true)} lang={lang} />
               ) : (
                 <div className="grid grid-cols-2 gap-4 mt-2">
@@ -555,51 +513,34 @@ const App: React.FC = () => {
                 </div>
               )}
             </div>
-            {/* Show Ads in Wardrobe View if not premium and no credits */}
-            {!isPremium && (profile?.credits || 0) === 0 && (
-              <div className="px-6 pb-2">
-                <AdBanner lang={lang} />
-              </div>
-            )}
+            {!isPremium && (profile?.credits || 0) === 0 && <div className="px-6 pb-2"><AdBanner lang={lang} /></div>}
           </>
         )}
         {activeView === 'outfits' && (
-          <>
-            <OutfitsView 
-              items={items} profile={profile} onAddClick={() => setIsAddItemOpen(true)} cache={outfitCache} 
-              selectedOccasion={selectedOccasion} onOccasionChange={setSelectedOccasion} 
-              isGenerating={isGenerating} isVisualizing={isVisualizing} generationPhase={generationPhase} 
-              onGenerate={handleGenerateOptions} onSelectOutfit={handleSelectOutfit} suggestedOutfits={suggestedOutfits}
-              onDeleteSuggestion={handleDeleteSuggestion}
-              onItemClick={setSelectedItem} lang={lang} isSettingFace={isAnalyzingFace} 
-              newItemsCount={newItemsCount}
-              onUpdateCache={() => {}}
-              onPaywall={() => setIsPaywallOpen(true)}
-              onFaceUpload={async (b) => { 
-                setIsAnalyzingFace(true); 
-                try { 
-                  const compressed = await compressImage(b, 800, 0.7);
-                  const url = await uploadWardrobeImage(user.id, 'avatar', compressed); 
-                  const updated = { ...profile!, avatar_url: url }; 
-                  setProfile(updated); 
-                  store.updateProfile(updated); 
-                  await updateUserProfile({ id: profile!.id, avatar_url: url }); 
-                } catch (e: any) {
-                  console.error("Avatar upload failed:", e);
-                } finally { 
-                  setIsAnalyzingFace(false); 
-                } 
-              }} 
-            />
-            {/* Show Ads in Outfits View if not premium and no credits */}
-            {!isPremium && (profile?.credits || 0) === 0 && !isGenerating && !isVisualizing && (
-              <div className="px-6">
-                <AdBanner lang={lang} />
-              </div>
-            )}
-          </>
+          <OutfitsView 
+            items={items || []} profile={profile} onAddClick={() => setIsAddItemOpen(true)} cache={outfitCache} 
+            selectedOccasion={selectedOccasion} onOccasionChange={setSelectedOccasion} 
+            isGenerating={isGenerating} isVisualizing={isVisualizing} generationPhase={generationPhase} 
+            onGenerate={handleGenerateOptions} onSelectOutfit={handleSelectOutfit} suggestedOutfits={suggestedOutfits || []}
+            onDeleteSuggestion={handleDeleteSuggestion}
+            onItemClick={setSelectedItem} lang={lang} isSettingFace={isAnalyzingFace} 
+            newItemsCount={newItemsCount}
+            onUpdateCache={() => {}}
+            onPaywall={() => setIsPaywallOpen(true)}
+            onFaceUpload={async (b) => { 
+              setIsAnalyzingFace(true); 
+              try { 
+                const compressed = await compressImage(b, 800, 0.7);
+                const url = await uploadWardrobeImage(user.id, 'avatar', compressed); 
+                const updated = { ...profile!, avatar_url: url }; 
+                setProfile(updated); 
+                store.updateProfile(updated); 
+                await updateUserProfile({ id: profile!.id, avatar_url: url }); 
+              } catch (e: any) { console.error(e); } finally { setIsAnalyzingFace(false); } 
+            }} 
+          />
         )}
-        {activeView === 'explore' && <ExploreView lang={lang} profile={profile} items={items} onUseCredit={handleUseCredit} onPaywall={() => setIsPaywallOpen(true)} />}
+        {activeView === 'explore' && <ExploreView lang={lang} profile={profile} items={items || []} onUseCredit={handleUseCredit} onPaywall={() => setIsPaywallOpen(true)} />}
       </main>
       
       {showUploadTooltip && (
@@ -618,24 +559,35 @@ const App: React.FC = () => {
       {isSettingsOpen && <SettingsModal isOpen={isSettingsOpen} userId={user.id} email={user.email || ''} onClose={() => setIsSettingsOpen(false)} profile={profile} onUpdate={(p) => { setProfile(p); store.updateProfile(p); }} onUpgrade={() => setIsPaywallOpen(true)} />}
       {isManualOpen && <UserManualModal isOpen={isManualOpen} onClose={() => setIsManualOpen(false)} lang={lang} />}
       <AddItemModal isOpen={isAddItemOpen} onClose={() => setIsAddItemOpen(false)} onStartUpload={handleStartUpload} lang={lang} />
-      {selectedItem && <ItemDetailsModal item={selectedItem} userId={user.id} isOpen={!!selectedItem} onClose={() => setSelectedItem(null)} onSave={(u) => { setItems(prev => prev.map(i => i.id === u.id ? u : i)); setSelectedItem(u); }} onDelete={(id) => { setItems(prev => prev.filter(i => i.id !== id)); }} lang={lang} />}
-      {isPaywallOpen && <Paywall isOpen={isPaywallOpen} onClose={() => setIsPaywallOpen(false)} onSubscribe={handleSubscribe} lang={lang} totalGenerations={profile?.total_generations} />}
+      {selectedItem && <ItemDetailsModal item={selectedItem} userId={user.id} isOpen={!!selectedItem} onClose={() => setSelectedItem(null)} onSave={(u) => { setItems(prev => (prev || []).map(i => i.id === u.id ? u : i)); setSelectedItem(u); }} onDelete={(id) => { setItems(prev => (prev || []).filter(i => i.id !== id)); }} lang={lang} canDelete={activeView === 'wardrobe'} />}
+      {isPaywallOpen && <Paywall isOpen={isPaywallOpen} onClose={() => setIsPaywallOpen(false)} onPurchaseSuccess={handlePurchaseSuccess} lang={lang} totalGenerations={profile?.total_generations} />}
 
       <NetworkErrorModal isOpen={isOffline} onRetry={() => { if(navigator.onLine) setIsOffline(false); }} lang={lang} />
 
       {showSuitabilityModal && (
         <div className="fixed inset-0 z-[500] flex items-center justify-center p-8 bg-black/80 backdrop-blur-xl animate-in fade-in">
-          <div className="bg-white w-full max-sm rounded-[64px] p-12 text-center shadow-2xl">
-             <div className="w-24 h-24 bg-[#26A69A]/10 rounded-full flex items-center justify-center mb-10 mx-auto">
-               <RefreshCw className="w-10 h-10 text-[#26A69A]" />
+          <div className="bg-white w-full max-sm rounded-[64px] p-12 text-center shadow-2xl scale-in duration-300 relative overflow-hidden">
+             <div className="absolute top-0 right-0 p-8 opacity-5"><Sparkles className="w-24 h-24 text-[#26A69A]" /></div>
+             <div className="w-24 h-24 bg-teal-50 rounded-full flex items-center justify-center mb-10 mx-auto border-4 border-white shadow-inner">
+               <Box className="w-10 h-10 text-[#26A69A]" />
              </div>
-             <h3 className="text-2xl font-black text-gray-900 uppercase tracking-tight mb-4">{modalType === 'mismatch' ? "Boutique Mismatch" : "Archive Exhausted"}</h3>
-             <p className="text-[13px] text-gray-500 font-medium leading-relaxed mb-12">
-               Our engine found no direct matches. Would you prefer a creative edit curated from your entire collection?
+             <h3 className="text-2xl font-black text-gray-900 uppercase tracking-tight mb-4">
+               {modalType === 'incomplete' ? "Incomplete Archive" : "Boutique Mismatch"}
+             </h3>
+             <p className="text-[13px] text-gray-500 font-medium leading-relaxed mb-12 px-4 italic text-center">
+               {modalType === 'incomplete' 
+                ? "Your archive lacks essential components for a complete set. Prefer a creative ensemble from your collection?" 
+                : "No exact occasion matches detected. Shall we initialize the Creative Stylist Engine?"}
              </p>
              <div className="w-full space-y-4">
-                <button onClick={() => handleGenerateOptions(pendingOccasion!, true)} className="w-full py-6 bg-[#26A69A] text-white font-black uppercase tracking-widest text-[11px] rounded-[28px] shadow-xl">Generate Creative Edit</button>
-                <button onClick={() => setShowSuitabilityModal(false)} className="w-full py-4 text-gray-400 font-black uppercase tracking-widest text-[10px]">Cancel</button>
+                <button 
+                  onClick={() => handleGenerateOptions(pendingOccasion!, true)} 
+                  className="w-full py-6 bg-zinc-900 text-white font-black uppercase tracking-[3px] text-[11px] rounded-[32px] shadow-2xl flex items-center justify-center space-x-3 active:scale-95 group transition-all"
+                >
+                  <Sparkles className="w-4 h-4 text-[#26A69A] group-hover:animate-spin" />
+                  <span>Start Creative Session</span>
+                </button>
+                <button onClick={() => setShowSuitabilityModal(false)} className="w-full py-4 text-gray-400 font-black uppercase tracking-widest text-[10px] hover:text-gray-600 transition-colors">Cancel Protocol</button>
              </div>
           </div>
         </div>
