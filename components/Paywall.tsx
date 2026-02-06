@@ -12,7 +12,7 @@ interface PaywallProps {
   totalGenerations?: number;
 }
 
-const Paywall: React.FC<PaywallProps> = ({ isOpen, onClose, onPurchaseSuccess, lang = 'en',  totalGenerations = 0}) => {
+const Paywall: React.FC<PaywallProps> = ({ isOpen, onClose, onPurchaseSuccess, lang = 'en',  totalGenerations = 0 }) => {
   const [selectedPackage, setSelectedPackage] = useState<PurchasesPackage | null>(null);
   const [packages, setPackages] = useState<PurchasesPackage[]>([]);
   const [loading, setLoading] = useState(true);
@@ -109,12 +109,15 @@ const Paywall: React.FC<PaywallProps> = ({ isOpen, onClose, onPurchaseSuccess, l
       setIsPurchasing(false);
     }
   };
-
+  
+  const isYeary = (id: String) => {
+    return id.includes('yearly') || id.includes('annual');
+  }
   // Helper to get Icon and Label based on Package ID
   const getPackageDetails = (pkg: PurchasesPackage) => {
-    const id = pkg.identifier;
+    const id = pkg.identifier.toLowerCase();
     
-    if (id.includes('yearly')) {
+    if (isYeary(id)) {
       return { icon: <Crown className="w-5 h-5" />, label: 'Yearly Membership', sub: 'Best Value' };
     }
     if (id.includes('monthly')) {
@@ -127,7 +130,7 @@ const Paywall: React.FC<PaywallProps> = ({ isOpen, onClose, onPurchaseSuccess, l
       return { icon: <Zap className="w-5 h-5" />, label: 'Starter Pack', sub: '59 Credits' };
     }
     // Fallback
-    return { icon: <Coins className="w-5 h-5" />, label: pkg.product.title, sub: '' };
+    return { icon: <Coins className="w-5 h-5" />, label: pkg.product.title, sub: id };
   };
 
   if (!isOpen) return null;
@@ -193,7 +196,7 @@ const Paywall: React.FC<PaywallProps> = ({ isOpen, onClose, onPurchaseSuccess, l
                   }`}
                 >
                   {/* Highlight Badge for Yearly */}
-                  {pkg.identifier.includes('yearly') && (
+                  {isYeary(pkg.identifier) && (
                     <div className="absolute -top-3.5 right-6 bg-amber-500 px-4 py-1.5 rounded-full flex items-center space-x-1 shadow-lg z-20">
                       <Star className="w-2.5 h-2.5 text-white fill-current" />
                       <span className="text-[8px] font-black text-white uppercase tracking-widest">BEST VALUE</span>
