@@ -412,18 +412,51 @@ const App: React.FC = () => {
 
   const handleSelectOutfit = async (outfit: OutfitSuggestion, force = false) => {
     if (!profile || !selectedOccasion) return;
+    
+    // Use cached image if available and not forcing regeneration
     if (!force && outfitCache[outfit.id]?.visualizedImage) return;
     
-    setIsVisualizing(true); setGenerationPhase('visualizing');
+    setIsVisualizing(true); 
+    setGenerationPhase('visualizing');
+    
     try {
+      // 1. Generate Image via Gemini (Returns Base64)
       const visualizedRaw = await visualizeOutfit(outfit, profile);
+      
+      // 2. Deduct Credits
       await handleUseCredit(true);
-      const visualized = await compressImage(visualizedRaw, 1024, 0.75);
-      const newCacheItem: CachedOutfit = { id: outfit.id, outfit, visualizedImage: visualized, generatedAt: Date.now(), combinationHistory: [] };
+      
+      // 3. Compress the Base64 Image
+      // 1024px width, 0.8 quality provides good balance for full-body outfits
+      const compressedBase64 = await compressImage(visualizedRaw, 1024, 0.8);
+      
+      // 4. Upload to Supabase Storage (glamorous bucket)
+      // Naming convention: outfit_{suggestionId}_{timestamp}
+      const fileName = `outfit_${outfit.id}_${Date.now()}`;
+      const publicUrl = await uploadWardrobeImage(user.id, fileName, compressedBase64);
+
+      // 5. Save the URL (not Base64) to Cache and Database
+      const newCacheItem: CachedOutfit = { 
+        id: outfit.id, 
+        outfit, 
+        visualizedImage: publicUrl, // Storing URL reference
+        generatedAt: Date.now(), 
+        combinationHistory: [] 
+      };
+
+      // Update Local State
       setOutfitCache(prev => ({ ...prev, [outfit.id]: newCacheItem }));
       store.updateCache({ ...outfitCache, [outfit.id]: newCacheItem });
+      
+      // Update Database
       await saveOutfitToCache(user.id, selectedOccasion, newCacheItem);
-    } catch (e) { console.error(e); } finally { setIsVisualizing(false); setGenerationPhase('complete'); }
+
+    } catch (e) { 
+      console.error("Visualization error:", e); 
+    } finally { 
+      setIsVisualizing(false); 
+      setGenerationPhase('complete'); 
+    }
   };
 
   const handlePurchaseSuccess = async (customerInfo: CustomerInfo) => {
@@ -590,7 +623,9 @@ const App: React.FC = () => {
             items={items || []} profile={profile} onAddClick={() => setIsAddItemOpen(true)} cache={outfitCache} 
             selectedOccasion={selectedOccasion} onOccasionChange={setSelectedOccasion} 
             isGenerating={isGenerating} isVisualizing={isVisualizing} generationPhase={generationPhase} 
-            onGenerate={handleGenerateOptions} onSelectOutfit={handleSelectOutfit} suggestedOutfits={suggestedOutfits || []}
+            onGenerate={handleGenerateOptions} 
+            onSelectOutfit={handleSelectOutfit} 
+            suggestedOutfits={suggestedOutfits || []}
             onDeleteSuggestion={handleDeleteSuggestion}
             onItemClick={setSelectedItem} lang={lang} isSettingFace={isAnalyzingFace} 
             newItemsCount={newItemsCount}
