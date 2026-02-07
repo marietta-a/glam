@@ -365,6 +365,7 @@ export const fetchOutfitCache = async (userId: string, wardrobeItems: WardrobeIt
           occasion: row.occasion as Occasion
         },
         visualizedImage: row.visualized_image_url,
+        avatarUrl: row.avatar_url,
         generatedAt: new Date(row.generated_at).getTime(),
         combinationHistory: row.history || []
       };
@@ -392,6 +393,7 @@ export const saveOutfitToCache = async (userId: string, occasion: string, cacheI
       wardrobe_item_ids: cacheItem.outfit.items.map(i => i.id),
       stylist_notes: cacheItem.outfit.stylistNotes,
       occasion: occasion,
+      avatar_url: cacheItem.avatarUrl,
       visualized_image_url: cacheItem.visualizedImage,
       generated_at: new Date(cacheItem.generatedAt).toISOString(),
       expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
@@ -488,7 +490,7 @@ export const trackOutfitGeneration = async (profile: UserProfile): Promise<UserP
  */
 export const useGenerationCredit = async (profile: UserProfile, isHD: boolean): Promise<UserProfile> => {
   // UNLIMITED ACCESS for Elite/Premium members
-  // if (profile.is_premium) return profile;
+  if (profile.is_premium) return profile;
   const deduction = (isHD 
                       ? (profile.credits < DEDUCTION_VALUE.HD_IMG ? profile.credits : DEDUCTION_VALUE.HD_IMG)
                       : (profile.credits < DEDUCTION_VALUE.STD_IMG ? profile.credits : DEDUCTION_VALUE.STD_IMG)

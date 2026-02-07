@@ -110,6 +110,7 @@ export interface CachedOutfit {
   id?: string; // Links to suggestion_id
   outfit: Outfit; 
   visualizedImage: string | null;
+  avatarUrl: string | null;
   generatedAt: number;
   history?: string[]; 
   combinationHistory?: string[];
