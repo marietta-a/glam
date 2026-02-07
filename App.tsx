@@ -337,43 +337,65 @@ const App: React.FC = () => {
 
   const handleGenerateOptions = async (occasion: Occasion, isUniversalMode = false) => {
     if (!profile?.avatar_url) { setActiveView('outfits'); return; }
+    
+    // 1. Credit Check
     if (!profile.is_premium && (profile.credits || 0) === 0 && (profile.daily_outfit_count || 0) >= 10) {
       setIsPaywallOpen(true);
       return;
     }
 
-    const canMakeSet = (inventory: WardrobeItem[]) => {
-      const hasShoes = inventory.some(i => i.category === 'Shoes');
-      const hasTop = inventory.some(i => i.category === 'Tops');
-      const hasBottom = inventory.some(i => i.category === 'Bottoms');
-      const hasDress = inventory.some(i => i.category === 'Dresses');
-      // Set rule: Shoes + (Dress OR (Top + Bottom))
-      return hasShoes && (hasDress || (hasTop && hasBottom));
-    };
+    // 2. Archive Health Check
+    // Instead of forcing strict rules (Shoes + Top + Bottom), we check if there is *enough* content to try.
+    // If the user has < 2 items, we can't really style much.
+    const availableItems = (items || []);
+    if (availableItems.length < 2) {
+       // Show a toast or small alert: "Add more items to start styling!"
+       alert("Please add at least 2 items to your wardrobe to generate outfits.");
+       return;
+    }
 
-    const globalArchiveComplete = canMakeSet(items || []);
-    const strictlyMatched = (items || []).filter(i => isItemSuitableForOccasion(i, occasion));
-    const occasionArchiveComplete = canMakeSet(strictlyMatched);
-
-    if (!isUniversalMode && !occasionArchiveComplete) {
+    const strictlyMatched = availableItems.filter(i => isItemSuitableForOccasion(i, occasion));
+    
+    // If Occasion Mode has 0 items, force modal to ask for Universal/Creative mode
+    if (!isUniversalMode && strictlyMatched.length === 0) {
       setPendingOccasion(occasion);
-      setModalType(globalArchiveComplete ? 'mismatch' : 'incomplete');
+      setModalType('mismatch');
       setShowSuitabilityModal(true);
       return;
     }
 
-    setIsGenerating(true); setGenerationPhase('analyzing'); setShowSuitabilityModal(false);
+    setIsGenerating(true); 
+    setGenerationPhase('analyzing'); 
+    setShowSuitabilityModal(false);
+
     try {
       setGenerationPhase('designing');
-      const itemsToUse = isUniversalMode ? (items || []) : strictlyMatched;
+      
+      // Determine Input Data
+      const itemsToUse = isUniversalMode ? availableItems : strictlyMatched;
+      
+      // Collect IDs we've already suggested to avoid repeats
       const existingIds = (suggestedOutfits || []).map(s => s.items.map(i => i.id).sort().join(','));
+      
+      // Call Service
       const { outfits, noMoreCombinations } = await suggestOutfits(itemsToUse, occasion, profile, existingIds, isUniversalMode);
       
-      if (noMoreCombinations && !isUniversalMode && outfits.length === 0) {
-        setPendingOccasion(occasion); setModalType('exhausted'); setShowSuitabilityModal(true);
-        setIsGenerating(false); return;
+      // Logic: If AI returns nothing...
+      if (outfits.length === 0) {
+        if (!isUniversalMode) {
+           // We tried strict occasion match and failed. Suggest Creative Mode.
+           setPendingOccasion(occasion); 
+           setModalType(noMoreCombinations ? 'exhausted' : 'incomplete'); // 'incomplete' implies we have items but they don't fit together well
+           setShowSuitabilityModal(true);
+        } else {
+           // Even universal mode failed (very rare if >2 items exist)
+           alert("Our stylist couldn't find a new unique combination. Try adding new pieces!");
+        }
+        setIsGenerating(false); 
+        return;
       }
 
+      // Success Logic
       if (!profile.is_premium) {
         const updated = await trackOutfitGeneration(profile);
         setProfile(updated);
@@ -381,16 +403,22 @@ const App: React.FC = () => {
       }
 
       const freshSuggestions = await saveOutfitSuggestions(user.id, occasion, outfits);
-      const countAtGeneration = (items || []).filter(i => isItemSuitableForOccasion(i, occasion)).length;
+      
+      // Metadata for "New Arrivals" badge logic
+      const countAtGeneration = availableItems.filter(i => isItemSuitableForOccasion(i, occasion)).length;
       setGenerationMetadata(prev => ({ ...prev, [occasion]: { countAtGeneration } }));
       
       setSelectedOccasion(occasion); 
       setSuggestedOutfits(prev => [...prev, ...freshSuggestions]);
       store.updateSuggestions({ ...store.suggestionCache, [occasion]: [...(suggestedOutfits || []), ...freshSuggestions] });
+
     } catch (e: any) { 
       if (e.message === 'DAILY_LIMIT_REACHED_OUTFIT') setIsPaywallOpen(true);
-      else console.error(e); 
-    } finally { setIsGenerating(false); setGenerationPhase('complete'); }
+      else console.error("Generation Error", e); 
+    } finally { 
+      setIsGenerating(false); 
+      setGenerationPhase('complete'); 
+    }
   };
 
   const handleDeleteSuggestion = async (suggestionId: string) => {
@@ -440,6 +468,7 @@ const App: React.FC = () => {
         id: outfit.id, 
         outfit, 
         visualizedImage: publicUrl, // Storing URL reference
+        avatarUrl: profile.avatar_url,
         generatedAt: Date.now(), 
         combinationHistory: [] 
       };

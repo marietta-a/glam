@@ -140,89 +140,157 @@ export const getBase64Data = async (urlOrBase64: string): Promise<string> => {
   });
 };
 
+const validateOutfitRules = (items: WardrobeItem[]): boolean => {
+  const categories = items.map(i => i.category);
+  const subCategories = items.map(i => (i.subCategory || '').toLowerCase());
+
+  const has = (cat: Category) => categories.includes(cat);
+  const count = (cat: Category) => categories.filter(c => c === cat).length;
+
+  // RULE 1: No Duplicate IDs (Sanity Check)
+  const ids = items.map(i => i.id);
+  if (new Set(ids).size !== ids.length) return false;
+
+  // RULE 2: Mutually Exclusive Core Pieces
+  // You cannot wear a Dress AND a Jumpsuit
+  // You cannot wear a Dress AND Bottoms (unless it's a specific layering style, but usually avoid for general logic)
+  // You cannot wear a Jumpsuit AND Top/Bottom
+  if (has('Dresses') && (has('Bottoms') || count('Dresses') > 1)) return false;
+  if (subCategories.includes('jumpsuit') && (has('Tops') || has('Bottoms') || has('Dresses'))) return false;
+
+  // RULE 3: Max one pair of shoes
+  if (count('Shoes') > 1) return false;
+
+  // RULE 4: Max one bag
+  if (count('Bags') > 1) return false;
+
+  // RULE 5: At least one "Body Covering" item (Top, Dress, or Jumpsuit)
+  const hasCovering = has('Tops') || has('Dresses') || has('Outerwear') || subCategories.includes('jumpsuit');
+  if (!hasCovering) return false;
+
+  return true;
+};
+
 export const suggestOutfits = async (
   items: WardrobeItem[], 
   occasion: Occasion, 
   profile?: UserProfile | null,
-  avoidCombinations: string[] = [],
+  avoidCombinations: string[] = [], // Comma separated IDs of previous outfits
   isUniversal: boolean = false
 ): Promise<{ outfits: Outfit[], noMoreCombinations: boolean }> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
+  // 1. Prepare Archive Data (Optimized for Tokens)
   const itemsText = items.slice(0, 400)
-    .map(i => `${i.id}:${i.category}:${i.name.slice(0,25).replace(/:/g, '')}:${i.primaryColor || ''}`)
-    .join('|');
+    .map(i => `[${i.id}] ${i.category} (${i.subCategory || 'General'}): ${i.name.slice(0, 30)} - ${i.primaryColor}`)
+    .join('\n');
 
-  const systemInstruction = `Role: Elite Stylist. 
-Objective: Curate 5-8 outfits for "${occasion}".
+  // 2. Define the Stylist Logic
+  const systemInstruction = `
+    ROLE: High-End Virtual Stylist.
+    OBJECTIVE: Create 6 unique, fashion-forward outfits for the occasion: "${occasion}".
+    
+    INVENTORY RULES:
+    1. USE PROVIDED IDs ONLY. Do not hallucinate items.
+    2. VARIETY: Don't use the same "Top" in every outfit. Shuffle the pieces.
+    3. AVOID REPETITION: Do not recreate these exact ID combinations: [${avoidCombinations.join(' | ')}].
+    
+    STYLING LOGIC (STRICT):
+    - CORE: Every outfit needs a base.
+      > Type A: Dress (1 piece)
+      > Type B: Jumpsuit (1 piece)
+      > Type C: Top + Bottom (2 pieces)
+    - LAYERING: You MAY add Outerwear (Jackets/Coats) to Type A, B, or C.
+    - FOOTWEAR: Include Shoes if available. If no shoes exist in archive, omit them (do not fail).
+    - ACCESSORIES: Add Bags/Hats to elevate the look.
+    
+    PROHIBITED COMBINATIONS (REALISM CHECK):
+    - NO Dresses + Pants.
+    - NO Jumpsuits + Tops.
+    - NO Multiple Shoes.
+    - NO Underwear/Innerwear as Outerwear unless specified.
 
-STRICT COUTURE PAIRING RULES:
-1. MANDATORY FOOTWEAR: Every outfit MUST include a pair of Shoes.
-2. DRESS OUTFIT: 1 Dress + 1 Pair of Shoes is a VALID, COMPLETE outfit. Do not add a top/bottom to a dress unless for layering.
-3. SEPARATES: 1 Top + 1 Bottom + 1 Pair of Shoes.
-4. ACCESSORIES: Complementary items only.
+    EXCEPTION HANDLING:
+    - If the archive is small (e.g., only tops exist), create "Concept Looks" focusing on how that top could be styled, or pair tops with accessories. Do not force a Bottom if none exist.
+    
+    OUTPUT FORMAT:
+    JSON Object: { "options": [{ "name": "Creative Headline", "itemIds": ["id1", "id2"], "stylistNotes": "Why this works..." }] }
+  `;
 
-${isUniversal ? "CREATIVE MODE: Ignore occasion tags. Create the most visually stunning combinations from the entire archive." : "OCCASION FOCUS: Items are already pre-filtered for suitability."}
-
-JSON OUTPUT ONLY: { options: [{ name, itemIds: [string], stylistNotes }], noMoreCombinations: boolean }`;
-
-  const response = await ai.models.generateContent({
-    model: 'gemini-flash-lite-latest', 
-    contents: `ARCHIVE:${itemsText}\nAVOID:${avoidCombinations.join(',')}`,
-    config: {
-      systemInstruction,
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          options: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                name: { type: Type.STRING },
-                itemIds: { type: Type.ARRAY, items: { type: Type.STRING } },
-                stylistNotes: { type: Type.STRING }
-              },
-              required: ["name", "itemIds", "stylistNotes"]
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-flash-lite-latest', 
+      contents: `ARCHIVE:\n${itemsText}\n\nTask: Generate looks.`,
+      config: {
+        systemInstruction,
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            options: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  name: { type: Type.STRING },
+                  itemIds: { type: Type.ARRAY, items: { type: Type.STRING } },
+                  stylistNotes: { type: Type.STRING }
+                },
+                required: ["name", "itemIds", "stylistNotes"]
+              }
             }
           },
-          noMoreCombinations: { type: Type.BOOLEAN }
-        },
-        required: ["options", "noMoreCombinations"]
+          required: ["options"]
+        }
       }
-    }
-  });
+    });
 
-  const result = parseSafeJson(response.text || '') || { options: [], noMoreCombinations: false };
-  
-  const validatedOutfits = (result.options || []).map((opt: any) => {
-    const foundItems = (opt.itemIds || [])
-      .map((id: string) => items.find(item => item.id === id))
-      .filter(Boolean) as WardrobeItem[];
-    
-    // Core check: Must have shoes and (Dress OR (Top + Bottom))
-    const hasShoes = foundItems.some(i => i.category === 'Shoes');
-    const hasDress = foundItems.some(i => i.category === 'Dresses');
-    const hasTop = foundItems.some(i => i.category === 'Tops');
-    const hasBottom = foundItems.some(i => i.category === 'Bottoms');
-    
-    if (hasShoes && (hasDress || (hasTop && hasBottom))) {
-      return {
+    const result = parseSafeJson(response.text || '') || { options: [] };
+    const generatedOptions = result.options || [];
+
+    // 3. Post-Processing & Validation
+    const validOutfits: Outfit[] = [];
+    const seenCombinations = new Set(avoidCombinations);
+
+    for (const opt of generatedOptions) {
+      // Map IDs to actual objects
+      const foundItems = (opt.itemIds || [])
+        .map((id: string) => items.find(item => item.id === id))
+        .filter(Boolean) as WardrobeItem[];
+
+      // Filter: Ensure we actually found the items
+      if (foundItems.length === 0) continue;
+
+      // Filter: Check uniqueness of this specific combo
+      const comboSignature = foundItems.map(i => i.id).sort().join(',');
+      if (seenCombinations.has(comboSignature)) continue;
+
+      // Filter: Run Logic Validator (The "No Jumpsuit + Pants" check)
+      if (!validateOutfitRules(foundItems)) continue;
+
+      // If passed all checks:
+      seenCombinations.add(comboSignature);
+      validOutfits.push({
         id: Math.random().toString(36).substr(2, 9),
         name: opt.name,
         items: foundItems,
         stylistNotes: opt.stylistNotes,
         occasion
-      };
+      });
     }
-    return null;
-  }).filter(Boolean) as Outfit[];
 
-  return { 
-    outfits: validatedOutfits,
-    noMoreCombinations: result.noMoreCombinations || (validatedOutfits.length === 0 && items.length > 0)
-  };
+    // Heuristic: If we generated 0 valid outfits but sent items, it might be a rigid prompt issue.
+    // However, since we relaxed the "Must have shoes" rule in the prompt, this should return results even for partial archives.
+    
+    return { 
+      outfits: validOutfits,
+      noMoreCombinations: validOutfits.length < generatedOptions.length // If we filtered some out, implies we might be hitting limits
+    };
+
+  } catch (error) {
+    console.error("Gemini Stylist Error:", error);
+    return { outfits: [], noMoreCombinations: false };
+  }
 };
 
 export const visualizeOutfit = async (outfit: Outfit, profile: UserProfile | null): Promise<string> => {
