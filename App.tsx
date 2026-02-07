@@ -44,7 +44,6 @@ import ExploreView from './components/ExploreView';
 import BottomNav from './components/BottomNav';
 import ProfileModal from './components/ProfileModal';
 import Sidebar from './components/Sidebar';
-import SettingsModal from './components/SettingsModal';
 import UserManualModal from './components/UserManualModal';
 import ItemDetailsModal from './components/ItemDetailsModal';
 import EmptyWardrobe from './components/EmptyWardrobe';
@@ -58,7 +57,10 @@ import UpdatePrompt from './components/UpdatePrompt';
 import NetworkErrorModal from './components/NetworkErrorModal';
 import { t } from './services/i18n';
 import { SplashScreen } from '@capacitor/splash-screen';
-import { PurchasesPackage } from '@revenuecat/purchases-capacitor';
+import { CustomerInfo, PurchasesPackage } from '@revenuecat/purchases-capacitor';
+import { SUBSCRIPTION_PACK_ID } from './enum';
+import { SUBSCRIPTION_PACK } from './constants';
+import SettingsModal from './components/settings/SettingsModal';
 
 const limit = pLimit(1);
 
@@ -316,10 +318,10 @@ const App: React.FC = () => {
     return Math.max(0, currentCount - meta.countAtGeneration);
   }, [selectedOccasion, suggestedOutfits, items, generationMetadata]);
 
-  const handleUseCredit = async () => {
+  const handleUseCredit = async (isHD: boolean) => {
     if (!profile) return;
     try {
-      const updatedProfile = await useGenerationCredit(profile);
+      const updatedProfile = await useGenerationCredit(profile, isHD);
       setProfile(updatedProfile);
       store.updateProfile(updatedProfile);
       return updatedProfile;
@@ -328,6 +330,10 @@ const App: React.FC = () => {
       throw err;
     }
   };
+
+  const handleEditorCreditUtilization = async () => {
+    return handleUseCredit(true);
+  }
 
   const handleGenerateOptions = async (occasion: Occasion, isUniversalMode = false) => {
     if (!profile?.avatar_url) { setActiveView('outfits'); return; }
@@ -410,8 +416,8 @@ const App: React.FC = () => {
     
     setIsVisualizing(true); setGenerationPhase('visualizing');
     try {
-      await handleUseCredit();
       const visualizedRaw = await visualizeOutfit(outfit, profile);
+      await handleUseCredit(true);
       const visualized = await compressImage(visualizedRaw, 1024, 0.75);
       const newCacheItem: CachedOutfit = { id: outfit.id, outfit, visualizedImage: visualized, generatedAt: Date.now(), combinationHistory: [] };
       setOutfitCache(prev => ({ ...prev, [outfit.id]: newCacheItem }));
@@ -420,15 +426,73 @@ const App: React.FC = () => {
     } catch (e) { console.error(e); } finally { setIsVisualizing(false); setGenerationPhase('complete'); }
   };
 
-  const handlePurchaseSuccess = async (customerInfo: any) => {
+  const handlePurchaseSuccess = async (customerInfo: CustomerInfo) => {
     if (!profile) return;
-    const isPremium = customerInfo.entitlements.active['premium'] !== undefined || 
-                      customerInfo.entitlements.active['elite'] !== undefined;
+
+    // 1. Analyze Active Entitlements
+    const activeEntitlements = customerInfo.entitlements.active;
     
-    const updated = { ...profile, is_premium: isPremium };
-    setProfile(updated);
-    store.updateProfile(updated);
-    await updateUserProfile(updated);
+    // Check specific identifiers from your RevenueCat setup
+    const isYearly = !!activeEntitlements[SUBSCRIPTION_PACK_ID.YEARLY];
+    const isMonthly = !!activeEntitlements[SUBSCRIPTION_PACK_ID.MONTHLY];
+    const isPremium = isYearly || isMonthly;
+
+    // 2. Determine Credit Bonus based on Plan
+    // This logic mimics your handleSubscribe function
+    let creditsToAdd = 0;
+    let successMessage = "Purchase Successful!";
+
+    if (isYearly) {
+        // Yearly gets 5000 bonus credits
+        creditsToAdd = SUBSCRIPTION_PACK.find(b => b.id == SUBSCRIPTION_PACK_ID.YEARLY)!.credits;
+        successMessage = `Elite Yearly Activated! ${creditsToAdd} Credits Added.`;
+    } else if (isMonthly) {
+        // Monthly gets 1000 bonus credits
+        creditsToAdd = SUBSCRIPTION_PACK.find(b => b.id == SUBSCRIPTION_PACK_ID.MONTHLY)!.credits;
+        successMessage = `Elite Monthly Activated! ${creditsToAdd} Credits Added.`;
+    } else {
+        // Handle Consumables (Growth/Starter) if they appear in entitlements
+        // Note: For pure consumables, ensure they are passed correctly or configured as non-renewing entitlements
+        if (activeEntitlements[SUBSCRIPTION_PACK_ID.GROWTH]) {
+            creditsToAdd = SUBSCRIPTION_PACK.find(b => b.id == SUBSCRIPTION_PACK_ID.GROWTH)!.credits;
+            successMessage = `${creditsToAdd} Credits Added!`;
+        } else if (activeEntitlements[SUBSCRIPTION_PACK_ID.STARTER]) {
+            creditsToAdd = SUBSCRIPTION_PACK.find(b => b.id == SUBSCRIPTION_PACK_ID.STARTER)!.credits;
+            successMessage = `${creditsToAdd} Credits Added!`;
+        }
+    }
+
+    // 3. Calculate New State
+    // Default to 0 if null in DB
+    const currentCredits = profile.credits || 0;
+    
+    // Only add credits if we found a matching pack logic
+    const newTotalCredits = creditsToAdd > 0 ? currentCredits + creditsToAdd : currentCredits;
+
+    const updatedProfile = { 
+        ...profile, 
+        is_premium: isPremium,
+        credits: newTotalCredits 
+    };
+
+    // 4. Update UI State & Global Store
+    setProfile(updatedProfile);
+    store.updateProfile(updatedProfile);
+
+    // 5. Persist to Database
+    // We update both the boolean flag and the numeric credits count
+    await updateUserProfile({
+        id: profile.id,
+        is_premium: isPremium,
+        credits: newTotalCredits,
+        updated_at: new Date().toISOString()
+    });
+
+    // 6. User Feedback
+    if (creditsToAdd > 0 || isPremium) {
+        alert(successMessage);
+    }
+    
     setIsPaywallOpen(false);
   };
 
@@ -446,13 +510,6 @@ const App: React.FC = () => {
         try {
           updateTask({ progress: 10 }); 
           const base64 = await getBase64Data(input); 
-          try { await handleUseCredit(); } catch (creditErr: any) {
-            if (creditErr.message === 'OUT_OF_CREDITS') {
-              updateTask({ status: 'error', errorMessage: 'Boutique credits exhausted. Refill for further archival extraction.', progress: 100 });
-              return;
-            }
-            throw creditErr;
-          }
           updateTask({ status: 'analyzing', progress: 20 });
           const results = await analyzeUpload(base64, profile?.language || 'en');
           if (!results || results.length === 0) throw new Error("No items detected.");
@@ -461,7 +518,19 @@ const App: React.FC = () => {
             const itemData = results[index];
             try {
               updateTask({ status: 'illustrating', progress: 30 + (index / results.length) * 60 });
+
               const isolated = await generateItemImage(itemData, base64);
+              
+              try { 
+                await handleUseCredit(false); 
+              } catch (creditErr: any) {
+                if (creditErr.message === 'OUT_OF_CREDITS') {
+                  updateTask({ status: 'error', errorMessage: 'Boutique credits exhausted. Refill for further archival extraction.', progress: 100 });
+                  return;
+                }
+                throw creditErr;
+              }
+
               const url = await uploadWardrobeImage(user.id, `item_${Math.random().toString(36).substr(2, 9)}`, isolated);
               const saved = await saveWardrobeItem({ ...itemData, userId: user.id, imageUrl: url, isFavorite: false });
               setItems(prev => { 
@@ -540,7 +609,7 @@ const App: React.FC = () => {
             }} 
           />
         )}
-        {activeView === 'explore' && <ExploreView lang={lang} profile={profile} items={items || []} onUseCredit={handleUseCredit} onPaywall={() => setIsPaywallOpen(true)} />}
+        {activeView === 'explore' && <ExploreView lang={lang} profile={profile} items={items || []} onUseCredit={handleEditorCreditUtilization} onPaywall={() => setIsPaywallOpen(true)} />}
       </main>
       
       {showUploadTooltip && (

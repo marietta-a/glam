@@ -27,7 +27,7 @@ const Paywall: React.FC<PaywallProps> = ({ isOpen, onClose, onSubscribe, lang = 
       highlight: true,
       tag: 'Best Value'
     },
-    { 
+    {  
       id: 'glam_premium_monthly', 
       name: 'Monthly Elite', 
       price: '$19.99/mo', 

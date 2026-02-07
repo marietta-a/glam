@@ -1,6 +1,7 @@
 import { supabase } from '../lib/supabase';
 import { WardrobeItem, UserProfile, CachedOutfit, Occasion, OutfitSuggestion, Outfit } from '../types';
 import {store} from '../services/storeService';
+import { DEDUCTION_VALUE } from '@/enum';
 // --- IMAGE UTILS ---
 
 export const compressImage = async (base64: string, maxWidth = 1200, quality = 0.7): Promise<string> => {
@@ -485,10 +486,13 @@ export const trackOutfitGeneration = async (profile: UserProfile): Promise<UserP
  * Freemium Limit: 1 per day.
  * Replaces old 'useGenerationCredit' for visual tasks.
  */
-export const useGenerationCredit = async (profile: UserProfile): Promise<UserProfile> => {
+export const useGenerationCredit = async (profile: UserProfile, isHD: boolean): Promise<UserProfile> => {
   // UNLIMITED ACCESS for Elite/Premium members
-  if (profile.is_premium) return profile;
-
+  // if (profile.is_premium) return profile;
+  const deduction = (isHD 
+                      ? (profile.credits < DEDUCTION_VALUE.HD_IMG ? profile.credits : DEDUCTION_VALUE.HD_IMG)
+                      : (profile.credits < DEDUCTION_VALUE.STD_IMG ? profile.credits : DEDUCTION_VALUE.STD_IMG)
+                    );
   // Check Daily Limit for Free Users
   const currentImageCount = profile.daily_image_count || 0;
   
@@ -499,7 +503,7 @@ export const useGenerationCredit = async (profile: UserProfile): Promise<UserPro
     // It implies if they have credits they can use them, OR if not they hit paywall.
     // For this implementation, we will check credits as a fallback.
     if ((profile.credits || 0) > 0) {
-      const newCredits = profile.credits - 1;
+      const newCredits = profile.credits - deduction;
       const updated = { ...profile, credits: newCredits, updated_at: new Date().toISOString() };
       await supabase
         .from('user_profile')
@@ -512,7 +516,7 @@ export const useGenerationCredit = async (profile: UserProfile): Promise<UserPro
   }
 
   // Increment Daily Count if within limit
-  const newImageCount = currentImageCount + 1;
+  const newImageCount = currentImageCount + deduction;
   const updated = { 
     ...profile, 
     daily_image_count: newImageCount,
