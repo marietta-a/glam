@@ -474,7 +474,7 @@ const App: React.FC = () => {
       
       // 3. Compress the Base64 Image
       // 1024px width, 0.8 quality provides good balance for full-body outfits
-      const compressedBase64 = await compressImage(visualizedRaw, 1024, 0.8);
+      const compressedBase64 = await compressImage(visualizedRaw, 800, 0.8);
       
       // 4. Upload to Supabase Storage (glamorous bucket)
       // Naming convention: outfit_{suggestionId}_{timestamp}
