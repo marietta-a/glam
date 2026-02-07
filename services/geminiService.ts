@@ -359,7 +359,7 @@ export const analyzeUpload = async (base64Image: string, lang: string = 'en'): P
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
   const response = await ai.models.generateContent({
-    model: 'gemini-3-pro-preview',
+    model: 'gemini-2.5-flash-lite', //'gemini-3-pro-preview',
     contents: { parts: [{ inlineData: { data, mimeType } }, { text: "Extract wardrobe items data. Return JSON." }] },
     config: {
       responseMimeType: "application/json",
@@ -394,10 +394,26 @@ export const analyzeUpload = async (base64Image: string, lang: string = 'en'): P
 export const generateItemImage = async (itemData: Partial<WardrobeItem>, sourceBase64: string): Promise<string> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const { data, mimeType } = await resizeImageForAI(sourceBase64, 512);
+  
+  const prompt = `
+    [TASK: GARMENT_EXTRACTION]
+    - TARGET: Extract the ${itemData.name}.
+    - STYLE: Ghost Mannequin / Invisible Mannequin / Flat Lay style.
+    - CONSTRAINT: REMOVE ALL HUMAN BODY PARTS. No heads, no hands, no legs, no skin, no models.
+    - BACKGROUND: Pure white (#FFFFFF) background.
+    - OUTPUT: The item only, floating on white.
+  `;
+
   const response = await ai.models.generateContent({
     model: 'gemini-2.5-flash-image',
-    contents: { parts: [{ inlineData: { data, mimeType } }, { text: `Isolate the ${itemData.name} on white background.` }] }
+    contents: { 
+      parts: [
+        { inlineData: { data, mimeType } }, 
+        { text: prompt }
+      ] 
+    }
   });
+
   const part = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
   if (!part) throw new Error("Isolation failed");
   return `data:image/png;base64,${part.inlineData!.data}`;

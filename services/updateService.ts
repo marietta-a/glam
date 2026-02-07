@@ -1,17 +1,13 @@
 import { Capacitor } from '@capacitor/core';
 import { App } from '@capacitor/app';
 import { AppUpdate, AppUpdateAvailability } from '@capawesome/capacitor-app-update';
+import { STORE_URLS } from '@/constants';
 
 interface VersionInfo {
   version: string;
   build: string;
 }
 
-// Store URLs for fallback
-const STORE_URLS = {
-  android: 'https://play.google.com/store/apps/details?id=com.glamai',
-  ios: 'itms-apps://itunes.apple.com/app/id123456789'
-};
 
 /**
  * Retrieves the current app version information.

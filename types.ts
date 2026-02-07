@@ -127,5 +127,18 @@ export interface UploadTask {
   processedItemsInBatch?: number;
 }
 
+export interface SubscriptionPack {
+  id: string;
+  name: string;
+  abr: string;
+  sortOrder: number,
+  price: number;
+  credits: number;
+  description: string;
+  icon: React.ReactNode;
+  highlight?: boolean;
+  tag?: string;
+}
+
 export type OutfitCache = Record<string, CachedOutfit>; // Key is suggestion_id
 export type SuggestionCache = Record<string, OutfitSuggestion[]>; // Key is Occasion
