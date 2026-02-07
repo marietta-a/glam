@@ -489,53 +489,48 @@ export const trackOutfitGeneration = async (profile: UserProfile): Promise<UserP
  * Replaces old 'useGenerationCredit' for visual tasks.
  */
 export const useGenerationCredit = async (profile: UserProfile, isHD: boolean): Promise<UserProfile> => {
-  // UNLIMITED ACCESS for Elite/Premium members
+  // 1. UNLIMITED ACCESS for Elite/Premium members
   if (profile.is_premium) return profile;
+
+  // 2. Calculate Cost
   const deduction = (isHD 
                       ? (profile.credits < DEDUCTION_VALUE.HD_IMG ? profile.credits : DEDUCTION_VALUE.HD_IMG)
                       : (profile.credits < DEDUCTION_VALUE.STD_IMG ? profile.credits : DEDUCTION_VALUE.STD_IMG)
                     );
-  // Check Daily Limit for Free Users
-  const currentImageCount = profile.daily_image_count || 0;
-  
-  // Free users get 1 per day
-  if (currentImageCount >= 1) {
-    // Fallback to Credits if daily limit exceeded? 
-    // The prompt says "Give 1 image generation per day for free". 
-    // It implies if they have credits they can use them, OR if not they hit paywall.
-    // For this implementation, we will check credits as a fallback.
-    if ((profile.credits || 0) > 0) {
-      const newCredits = profile.credits - deduction;
-      const updated = { ...profile, credits: newCredits, updated_at: new Date().toISOString() };
-      await supabase
-        .from('user_profile')
-        .update({ credits: newCredits, updated_at: updated.updated_at })
-        .eq('id', profile.id);
-      return updated;
-    } else {
-      throw new Error("OUT_OF_CREDITS"); // Triggers Paywall
-    }
+
+  // 3. Strict Credit Check
+  // If user has fewer credits than required, BLOCK ACTION.
+  // We use a small buffer (e.g. 0.5) to handle floating point variations, or just check <= 0
+  if ((profile.credits || 0) < deduction) {
+      throw new Error("OUT_OF_CREDITS"); // Triggers Paywall in App.tsx
   }
 
-  // Increment Daily Count if within limit
-  const newImageCount = currentImageCount + deduction;
+  // 4. Process Deduction
+  const newCredits = (profile.credits || 0) - deduction;
+  
+  // 5. Update Database & Store
   const updated = { 
     ...profile, 
-    daily_image_count: newImageCount,
+    credits: newCredits, 
+    daily_image_count: (profile.daily_image_count || 0) + 1, // We still track count for analytics, but it doesn't grant free access
     updated_at: new Date().toISOString()
   };
 
-  await supabase
+  const { error } = await supabase
     .from('user_profile')
     .update({ 
-      daily_image_count: newImageCount,
+      credits: newCredits, 
+      daily_image_count: updated.daily_image_count,
       updated_at: updated.updated_at 
     })
     .eq('id', profile.id);
 
+  if (error) throw error;
+
   store.updateProfile(updated);
   return updated;
 };
+
 
 export const deleteAllUserData = async (userId: string): Promise<void> => {
   const { data: items } = await supabase.from('wardrobe_items').select('item_id').eq('user_id', userId);

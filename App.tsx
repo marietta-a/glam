@@ -58,7 +58,7 @@ import NetworkErrorModal from './components/NetworkErrorModal';
 import { t } from './services/i18n';
 import { SplashScreen } from '@capacitor/splash-screen';
 import { CustomerInfo, PurchasesPackage } from '@revenuecat/purchases-capacitor';
-import { SUBSCRIPTION_PACK_ID } from './enum';
+import { CREDIT_REWARDS, SUBSCRIPTION_PACK_ID } from './enum';
 import { SUBSCRIPTION_PACK } from './constants';
 import SettingsModal from './components/settings/SettingsModal';
 
@@ -227,7 +227,14 @@ const App: React.FC = () => {
 
           let up = await fetchUserProfile(user.id);
           if (!up) { 
-            await createUserProfile({ id: user.id, username: user.email?.split('@')[0] || 'Member', email: user.email!, language: 'en' }); 
+            await createUserProfile({ 
+              id: user.id, 
+              username: user.email?.split('@')[0] || 'Member', 
+              email: user.email!, 
+              language: 'en',
+              credits: CREDIT_REWARDS.STARTUP_CREDIT, // <--- AWARD 50 FREE CREDITS HERE
+              is_premium: false 
+            }); 
             up = await fetchUserProfile(user.id); 
           }
           
@@ -289,6 +296,17 @@ const App: React.FC = () => {
           setTimeout(() => setLoading(false), 1200);
         } catch (e) { 
           console.error("Initialization Error:", e);
+          // 1. Inform the user
+          alert("Synchronization failed due to network connectivity. Please log in again.");
+
+          // 2. Force Logout logic
+          await logoutUser();
+          
+          // 3. Clear local state to trigger the <Auth /> screen render
+          setUser(null); 
+          setProfile(null);
+          
+          // 4. Stop loading so the Auth screen becomes visible
           setLoading(false); 
         }
       };
@@ -448,15 +466,15 @@ const App: React.FC = () => {
     setGenerationPhase('visualizing');
     
     try {
-      // 1. Generate Image via Gemini (Returns Base64)
-      const visualizedRaw = await visualizeOutfit(outfit, profile);
-      
-      // 2. Deduct Credits
+      // 1. Deduct Credits
       await handleUseCredit(true);
+
+      // 2. Generate Image via Gemini (Returns Base64)
+      const visualizedRaw = await visualizeOutfit(outfit, profile);
       
       // 3. Compress the Base64 Image
       // 1024px width, 0.8 quality provides good balance for full-body outfits
-      const compressedBase64 = await compressImage(visualizedRaw, 1024, 0.8);
+      const compressedBase64 = await compressImage(visualizedRaw, 800, 0.8);
       
       // 4. Upload to Supabase Storage (glamorous bucket)
       // Naming convention: outfit_{suggestionId}_{timestamp}
@@ -571,6 +589,17 @@ const App: React.FC = () => {
         const updateTask = (updates: Partial<UploadTask>) => setUploadTasks(prev => prev.map(t => t.id === taskId ? { ...t, ...updates } : t));
         try {
           updateTask({ progress: 10 }); 
+
+          try { 
+            await handleUseCredit(false); 
+          } catch (creditErr: any) {
+            if (creditErr.message === 'OUT_OF_CREDITS') {
+              updateTask({ status: 'error', errorMessage: 'Boutique credits exhausted. Refill for further archival extraction.', progress: 100 });
+              return;
+            }
+            throw creditErr;
+          }
+
           const base64 = await getBase64Data(input); 
           updateTask({ status: 'analyzing', progress: 20 });
           const results = await analyzeUpload(base64, profile?.language || 'en');
@@ -582,16 +611,6 @@ const App: React.FC = () => {
               updateTask({ status: 'illustrating', progress: 30 + (index / results.length) * 60 });
 
               const isolated = await generateItemImage(itemData, base64);
-              
-              try { 
-                await handleUseCredit(false); 
-              } catch (creditErr: any) {
-                if (creditErr.message === 'OUT_OF_CREDITS') {
-                  updateTask({ status: 'error', errorMessage: 'Boutique credits exhausted. Refill for further archival extraction.', progress: 100 });
-                  return;
-                }
-                throw creditErr;
-              }
 
               const url = await uploadWardrobeImage(user.id, `item_${Math.random().toString(36).substr(2, 9)}`, isolated);
               const saved = await saveWardrobeItem({ ...itemData, userId: user.id, imageUrl: url, isFavorite: false });

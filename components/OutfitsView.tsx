@@ -1,13 +1,10 @@
-
 import React, { useMemo, useState, useRef, useEffect } from 'react';
-// Added ORDERED_OCCASIONS to the import list from ../types to fix undefined variable error
 import { WardrobeItem, Occasion, OutfitCache, CachedOutfit, UserProfile, OutfitSuggestion, ORDERED_OCCASIONS } from '../types';
-import { Sparkles, Shirt, RefreshCcw, Wand2, User, Camera, Loader2, Sparkle, Download, AlertTriangle, X, Eye, Globe, Layers, ArrowRight, CheckCircle2, Box, Fingerprint, Trash2, Quote } from 'lucide-react';
+import { Sparkles, Shirt, RefreshCcw, Wand2, User, Camera, Loader2, Sparkle, Download, AlertTriangle, X, Eye, Globe, Layers, ArrowRight, CheckCircle2, Box, Fingerprint, Trash2, Quote, RefreshCw } from 'lucide-react';
 import { t } from '../services/i18n';
 import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
-import { isItemSuitableForOccasion } from '../services/geminiService';
 
 interface OutfitsViewProps {
   items: WardrobeItem[];
@@ -83,6 +80,7 @@ const OutfitsView: React.FC<OutfitsViewProps> = ({
   const [designingIndex, setDesigningIndex] = useState(0);
   const faceInputRef = useRef<HTMLInputElement>(null);
 
+  // ... (Keep existing useEffects for intervals and activeSuggestionId) ...
   const DESIGNING_MESSAGES = [
     "Analyzing Silhouette Architecture...",
     "Cross-referencing Seasonal Palettes...",
@@ -133,6 +131,12 @@ const OutfitsView: React.FC<OutfitsViewProps> = ({
     return activeSuggestionId ? cache[activeSuggestionId] : null;
   }, [activeSuggestionId, cache]);
 
+  // Check if the current profile avatar differs from the one used in the visualization
+  const isAvatarOutdated = useMemo(() => {
+    if (!activeVisualization?.visualizedImage || !activeVisualization.avatarUrl || !profile?.avatar_url) return false;
+    return activeVisualization.avatarUrl !== profile.avatar_url;
+  }, [activeVisualization, profile]);
+
   useEffect(() => {
     let interval: any;
     if (isVisualizing) {
@@ -166,13 +170,22 @@ const OutfitsView: React.FC<OutfitsViewProps> = ({
     const filename = `GlamAI-${activeSuggestion?.name.replace(/\s+/g, '') || 'Outfit'}.png`;
     try {
       if (Capacitor.isNativePlatform()) {
-        const base64Data = activeVisualization.visualizedImage.split(',')[1];
-        const savedFile = await Filesystem.writeFile({
-          path: filename,
-          data: base64Data,
-          directory: Directory.Cache,
-        });
-        await Share.share({ title: 'Save your GlamAI Outfit', url: savedFile.uri });
+        const base64Data = activeVisualization.visualizedImage.split(',')[1] || activeVisualization.visualizedImage; // Handle if URL or Base64 (though logic says URL now)
+        // Note: Filesystem.writeFile usually expects base64 data. 
+        // Since we switched to URLs in wardrobeService, handleDownload needs to fetch the blob first if it's a remote URL.
+        const response = await fetch(activeVisualization.visualizedImage);
+        const blob = await response.blob();
+        const reader = new FileReader();
+        reader.onloadend = async () => {
+            const base64 = (reader.result as string).split(',')[1];
+            const savedFile = await Filesystem.writeFile({
+                path: filename,
+                data: base64,
+                directory: Directory.Cache,
+            });
+            await Share.share({ title: 'Save your GlamAI Outfit', url: savedFile.uri });
+        };
+        reader.readAsDataURL(blob);
       } else {
         const response = await fetch(activeVisualization.visualizedImage);
         const blob = await response.blob() as Blob;
@@ -188,7 +201,9 @@ const OutfitsView: React.FC<OutfitsViewProps> = ({
     } catch (e) { console.error('Download failed:', e); }
   };
 
+  // ... (Keep existing empty state checks) ...
   if (items.length < 2) {
+    // ... same as before
     return (
       <div className="flex-1 flex flex-col p-8 space-y-12 min-h-[75vh] animate-in fade-in duration-1000">
         <div className="space-y-3">
@@ -230,44 +245,45 @@ const OutfitsView: React.FC<OutfitsViewProps> = ({
   }
 
   if (!profile?.avatar_url || isSettingFace) {
+    // ... same as before
     return (
-      <div className="flex-1 flex flex-col p-8 space-y-12 min-h-[75vh] animate-in zoom-in duration-700 bg-white">
-        <div className="text-center space-y-4">
-          <div className="inline-flex items-center justify-center space-x-2 px-4 py-1.5 bg-zinc-900 text-white rounded-full">
-            <Sparkles className="w-3 h-3" />
-            <span className="text-[8px] font-black uppercase tracking-[2px]">{isSettingFace ? 'Archiving Identity' : 'Identity Blueprint Required'}</span>
+        <div className="flex-1 flex flex-col p-8 space-y-12 min-h-[75vh] animate-in zoom-in duration-700 bg-white">
+          <div className="text-center space-y-4">
+            <div className="inline-flex items-center justify-center space-x-2 px-4 py-1.5 bg-zinc-900 text-white rounded-full">
+              <Sparkles className="w-3 h-3" />
+              <span className="text-[8px] font-black uppercase tracking-[2px]">{isSettingFace ? 'Archiving Identity' : 'Identity Blueprint Required'}</span>
+            </div>
+            <h2 className="text-4xl font-black text-gray-900 tracking-tight uppercase leading-none">Reality <br /> Sync</h2>
+            <p className="text-xs text-gray-400 font-medium px-8 leading-relaxed">
+              {isSettingFace ? 'Synchronizing your physical blueprints to our cloud archive...' : 'We require a facial reference to perform occasion-based reality synthesis.'}
+            </p>
           </div>
-          <h2 className="text-4xl font-black text-gray-900 tracking-tight uppercase leading-none">Reality <br /> Sync</h2>
-          <p className="text-xs text-gray-400 font-medium px-8 leading-relaxed">
-            {isSettingFace ? 'Synchronizing your physical blueprints to our cloud archive...' : 'We require a facial reference to perform occasion-based reality synthesis.'}
-          </p>
-        </div>
-        <div className="relative flex-1 flex flex-col items-center justify-center">
-           <div className="w-64 h-64 rounded-[80px] border-2 border-dashed border-teal-100 flex items-center justify-center relative group">
-              <div className={`absolute inset-4 border-2 border-[#26A69A]/20 rounded-[64px] ${isSettingFace ? 'animate-spin border-t-[#26A69A]' : 'animate-pulse'}`} />
-              <div className="z-10 bg-white p-8 rounded-full shadow-2xl transition-transform group-hover:scale-110 duration-700">
-                {isSettingFace ? <Loader2 className="w-12 h-12 text-[#26A69A] animate-spin" /> : <User className="w-12 h-12 text-gray-200" />}
-              </div>
-           </div>
-           {isSettingFace && (
-             <div className="w-full max-w-[200px] mt-10 space-y-3">
-                <div className="flex items-center justify-between px-1">
-                   <span className="text-[8px] font-black text-[#26A69A] uppercase tracking-widest">Syncing Identity...</span>
-                   <span className="text-[10px] font-black text-gray-900">{Math.round(uploadProgress)}%</span>
-                </div>
-                <div className="w-full h-1 bg-gray-50 rounded-full overflow-hidden">
-                   <div className="h-full bg-[#26A69A] transition-all duration-300" style={{ width: `${uploadProgress}%` }} />
+          <div className="relative flex-1 flex flex-col items-center justify-center">
+             <div className="w-64 h-64 rounded-[80px] border-2 border-dashed border-teal-100 flex items-center justify-center relative group">
+                <div className={`absolute inset-4 border-2 border-[#26A69A]/20 rounded-[64px] ${isSettingFace ? 'animate-spin border-t-[#26A69A]' : 'animate-pulse'}`} />
+                <div className="z-10 bg-white p-8 rounded-full shadow-2xl transition-transform group-hover:scale-110 duration-700">
+                  {isSettingFace ? <Loader2 className="w-12 h-12 text-[#26A69A] animate-spin" /> : <User className="w-12 h-12 text-gray-200" />}
                 </div>
              </div>
-           )}
+             {isSettingFace && (
+               <div className="w-full max-w-[200px] mt-10 space-y-3">
+                  <div className="flex items-center justify-between px-1">
+                     <span className="text-[8px] font-black text-[#26A69A] uppercase tracking-widest">Syncing Identity...</span>
+                     <span className="text-[10px] font-black text-gray-900">{Math.round(uploadProgress)}%</span>
+                  </div>
+                  <div className="w-full h-1 bg-gray-50 rounded-full overflow-hidden">
+                     <div className="h-full bg-[#26A69A] transition-all duration-300" style={{ width: `${uploadProgress}%` }} />
+                  </div>
+               </div>
+             )}
+          </div>
+          <button onClick={() => faceInputRef.current?.click()} disabled={isSettingFace} className="w-full py-6 bg-zinc-900 text-white font-black uppercase tracking-[3px] text-[11px] rounded-[32px] shadow-2xl active:scale-95 transition-all flex items-center justify-center space-x-3 group">
+            {isSettingFace ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
+            <span>{isSettingFace ? 'Processing Archive' : 'Capture Blueprint'}</span>
+          </button>
+          <input type="file" ref={faceInputRef} onChange={handleFaceSelect} className="hidden" accept="image/*" />
         </div>
-        <button onClick={() => faceInputRef.current?.click()} disabled={isSettingFace} className="w-full py-6 bg-zinc-900 text-white font-black uppercase tracking-[3px] text-[11px] rounded-[32px] shadow-2xl active:scale-95 transition-all flex items-center justify-center space-x-3 group">
-          {isSettingFace ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
-          <span>{isSettingFace ? 'Processing Archive' : 'Capture Blueprint'}</span>
-        </button>
-        <input type="file" ref={faceInputRef} onChange={handleFaceSelect} className="hidden" accept="image/*" />
-      </div>
-    );
+      );
   }
 
   return (
@@ -365,7 +381,24 @@ const OutfitsView: React.FC<OutfitsViewProps> = ({
                 ) : activeVisualization?.visualizedImage ? (
                   <div className="w-full h-full relative animate-in fade-in duration-1000">
                     <img src={activeVisualization.visualizedImage} alt="Reality Result" className="w-full h-full object-cover" />
-                    <button onClick={handleDownload} className="absolute top-8 right-8 p-4 bg-white text-zinc-900 rounded-2xl shadow-2xl active:scale-90 transition-transform"><Download className="w-5 h-5" /></button>
+                    
+                    {/* Action Buttons Overlay */}
+                    <div className="absolute top-8 right-8 flex flex-col gap-3">
+                        <button onClick={handleDownload} className="p-4 bg-white text-zinc-900 rounded-2xl shadow-2xl active:scale-90 transition-transform">
+                            <Download className="w-5 h-5" />
+                        </button>
+                        
+                        {/* RE-VISUALIZE BUTTON - Shows only if avatars differ */}
+                        {activeSuggestion && isAvatarOutdated && (
+                            <button 
+                                onClick={() => onSelectOutfit(activeSuggestion, true)}
+                                className="p-4 bg-[#26A69A] text-white rounded-2xl shadow-2xl active:scale-90 transition-transform animate-in zoom-in duration-300"
+                                title="Avatar has changed. Update visualization?"
+                            >
+                                <RefreshCw className="w-5 h-5" />
+                            </button>
+                        )}
+                    </div>
                   </div>
                 ) : (
                   <div className="absolute inset-0 flex flex-col items-center justify-center p-12 text-center space-y-8 overflow-hidden">
