@@ -417,19 +417,26 @@ export const processFaceReplacement = async (targetSceneBase64: string, avatarBa
   return `data:image/png;base64,${part.inlineData!.data}`;
 };
 
-// ... existing imports ... 
-// Ensure 'Type' is imported from @google/genai
-
 export const analyzeUpload = async (base64Image: string, lang: string = 'en'): Promise<Partial<WardrobeItem>[]> => {
   const { data, mimeType } = await resizeImageForAI(base64Image, 512); 
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  
 
   const response = await ai.models.generateContent({
     model: 'gemini-2.5-flash-lite',
     contents: { 
       parts: [
         { inlineData: { data, mimeType } }, 
-        { text: `Analyze the clothing image. Identify items and return JSON. 
+        { text: `
+          You are a strict Fashion Inventory AI. Analyze the image.
+
+          PHASE 1: RELEVANCE CHECK
+          - Is this image clearly a fashion item (clothing, footwear, bag, accessory)?
+          - REJECT IF: The image contains ONLY pets, food, landscapes, vehicles, furniture, documents, or blurry non-objects.
+          - IF REJECTED: Return exactly { "items": [] }. Do not hallucinate.
+
+          PHASE 2: EXTRACTION (Only if Phase 1 passes)
+          Identify items and return JSON. 
           
           RULES:
           1. CATEGORY: Classify every item into exactly one of: ${CATEGORIES.join(', ')}.
@@ -439,7 +446,7 @@ export const analyzeUpload = async (base64Image: string, lang: string = 'en'): P
              - Map 'Sneakers', 'Boots', 'Sandals' -> 'Shoes'
              
           2. OCCASION: For 'occasionSuitability', pick appropriate tags ONLY from this list: ${ORDERED_OCCASIONS.join(', ')}.
-             - Select multiple if applicable (e.g., a blazer can be 'Work' and 'Job Interview').
+             - Select multiple if applicable.
           ` 
         }
       ] 
@@ -468,7 +475,6 @@ export const analyzeUpload = async (base64Image: string, lang: string = 'en'): P
                   type: Type.ARRAY, 
                   items: { 
                     type: Type.STRING,
-                    // Enforce strict occasion list
                     enum: ORDERED_OCCASIONS
                   } 
                 }

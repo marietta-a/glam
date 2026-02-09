@@ -524,7 +524,11 @@ const App: React.FC = () => {
 
           const base64 = await getBase64Data(input); 
           updateTask({ status: 'analyzing', progress: 20 });
-          const results = await analyzeUpload(base64, profile?.language || 'en');
+          const results = await analyzeUpload(base64, profile?.language || 'en');          
+          // UPDATED CHECK
+          if (!results || results.length === 0) {
+             throw new Error("No fashion items detected. Please upload clear photos of clothing.");
+          }
           if (!results || results.length === 0) throw new Error("No items detected.");
           updateTask({ totalItemsInBatch: results.length, processedItemsInBatch: 0, progress: 30 });
           for (let index = 0; index < results.length; index++) {
