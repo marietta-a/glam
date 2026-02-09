@@ -446,6 +446,45 @@ export const checkAndResetDailyLimits = async (profile: UserProfile): Promise<Us
   return profile;
 };
 
+/**
+ * Specifically updates subscription status and credits.
+ * We separate this from generic profile updates to ensure atomic success.
+ */
+export const updateSubscriptionStatus = async (
+  userId: string, 
+  isPremium: boolean, 
+  credits: number
+): Promise<void> => {
+  console.log(`Syncing DB: User ${userId} -> Premium: ${isPremium}, Credits: ${credits}`);
+
+  const { data, error } = await supabase
+    .from('user_profile')
+    .update({ 
+      is_premium: isPremium,
+      credits: credits,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', userId)
+    .select(); // .select() returns the data so we can verify the update
+
+  if (error) {
+    console.error("Supabase Write Error:", error.message);
+    throw error;
+  }
+
+  if (!data || data.length === 0) {
+    console.error("Supabase: No rows updated. ID mismatch?");
+  } else {
+    console.log("Supabase Success:", data[0]);
+  }
+  
+  // Force local store update just in case
+  if (store.profile) {
+      store.profile.is_premium = isPremium;
+      store.profile.credits = credits;
+  }
+};
+
 export const addCredits = async (profile: UserProfile, amount: number): Promise<UserProfile> => {
   const newCredits = (profile.credits || 0) + amount;
   const { error } = await supabase
@@ -501,7 +540,7 @@ export const useGenerationCredit = async (profile: UserProfile, isHD: boolean): 
   // 3. Strict Credit Check
   // If user has fewer credits than required, BLOCK ACTION.
   // We use a small buffer (e.g. 0.5) to handle floating point variations, or just check <= 0
-  if ((profile.credits || 0) < deduction) {
+  if ((profile.credits || 0) <= 0) {
       throw new Error("OUT_OF_CREDITS"); // Triggers Paywall in App.tsx
   }
 
@@ -546,3 +585,4 @@ export const deleteAllUserData = async (userId: string): Promise<void> => {
     await supabase.storage.from('glamorous').remove(paths);
   } catch (e) { console.warn("Storage cleanup incomplete", e); }
 };
+

@@ -1,4 +1,3 @@
-
 export type LanguageCode = 'en' | 'es' | 'fr' | 'ja';
 
 export const LANGUAGES: { code: LanguageCode; name: string }[] = [
@@ -59,6 +58,7 @@ const translations: Record<LanguageCode, Record<string, string>> = {
     pro_wardrobe: 'Pro Wardrobe',
     purchase_credits: 'Refill Credits',
     credits_remaining: 'Credits Remaining',
+    out_of_credits: 'Out of Credits',
     free_trial_limit: 'Free Trial: 15 Simulations',
     google_pay_secure: 'Secure payment via Google Play',
     restore_purchase: 'Restore Purchase',
@@ -147,6 +147,7 @@ const translations: Record<LanguageCode, Record<string, string>> = {
     pro_wardrobe: 'Armario Pro',
     purchase_credits: 'Recargar Créditos',
     credits_remaining: 'Créditos Restantes',
+    out_of_credits: 'Sin Créditos',
     free_trial_limit: 'Prueba Gratis: 15 Simulaciones',
     google_pay_secure: 'Pago seguro vía Google Play',
     restore_purchase: 'Restaurar Compra',
@@ -235,6 +236,7 @@ const translations: Record<LanguageCode, Record<string, string>> = {
     pro_wardrobe: 'Garde-robe Pro',
     purchase_credits: 'Recharger Crédits',
     credits_remaining: 'Crédits Restants',
+    out_of_credits: 'Crédits Épuisés',
     free_trial_limit: 'Essai Gratuit: 15 Simulations',
     google_pay_secure: 'Paiement sécurisé via Google Play',
     restore_purchase: 'Restaurer l\'achat',
@@ -323,6 +325,7 @@ const translations: Record<LanguageCode, Record<string, string>> = {
     pro_wardrobe: 'プロワードローブ',
     purchase_credits: 'クレジットをチャージ',
     credits_remaining: '残りクレジット',
+    out_of_credits: 'クレジット不足',
     free_trial_limit: '無料トライアル: 15回',
     google_pay_secure: 'Google Playによる安全な支払い',
     restore_purchase: '購入を復元',

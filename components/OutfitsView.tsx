@@ -131,6 +131,8 @@ const OutfitsView: React.FC<OutfitsViewProps> = ({
     return activeSuggestionId ? cache[activeSuggestionId] : null;
   }, [activeSuggestionId, cache]);
 
+  
+
   // Check if the current profile avatar differs from the one used in the visualization
   const isAvatarOutdated = useMemo(() => {
     if (!activeVisualization?.visualizedImage || !activeVisualization.avatarUrl || !profile?.avatar_url) return false;

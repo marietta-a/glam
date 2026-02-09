@@ -23,7 +23,8 @@ import {
   saveOutfitSuggestions,
   fetchAllOutfitSuggestions,
   deleteOutfitSuggestion,
-  deleteOutfitFromCache
+  deleteOutfitFromCache,
+  updateSubscriptionStatus
 } from './services/wardrobeService';
 import { 
   suggestOutfits, 
@@ -33,7 +34,7 @@ import {
   getBase64Data,
   isItemSuitableForOccasion
 } from './services/geminiService';
-import { initRevenueCat, getActiveEntitlements } from './services/purchaseService';
+import { initRevenueCat, getActiveEntitlements, isPremiumUser } from './services/purchaseService';
 import { CloudSync, RefreshCw, Box, Sparkles, Wand2 } from 'lucide-react';
 import Header from './components/Header';
 import Tabs from './components/Tabs';
@@ -222,8 +223,7 @@ const App: React.FC = () => {
         try {
           // Initialize RevenueCat early
           await initRevenueCat(user.id);
-          const entitlements = await getActiveEntitlements();
-          const hasEliteAccess = entitlements.includes('premium') || entitlements.includes('elite');
+          const isPremium = await isPremiumUser();
 
           let up = await fetchUserProfile(user.id);
           if (!up) { 
@@ -241,9 +241,9 @@ const App: React.FC = () => {
           if (up) {
             up = await checkAndResetDailyLimits(up);
             // Sync RevenueCat state to local profile if there's a mismatch
-            if (up.is_premium !== hasEliteAccess) {
-              up.is_premium = hasEliteAccess;
-              await updateUserProfile({ id: up.id, is_premium: hasEliteAccess });
+            if (up.is_premium !== isPremium) {
+              up.is_premium = isPremium;
+              await updateUserProfile({ id: up.id, is_premium: isPremium });
             }
           }
 
@@ -344,7 +344,11 @@ const App: React.FC = () => {
       store.updateProfile(updatedProfile);
       return updatedProfile;
     } catch (err: any) {
-      if (err.message === 'OUT_OF_CREDITS') { setIsPaywallOpen(true); throw err; }
+      if (err.message === 'OUT_OF_CREDITS') {
+         alert(t('out_of_credits', profile.language))
+         setIsPaywallOpen(true); 
+         throw err; 
+      }
       throw err;
     }
   };
@@ -525,11 +529,11 @@ const App: React.FC = () => {
     if (isYearly) {
         // Yearly gets 5000 bonus credits
         creditsToAdd = SUBSCRIPTION_PACK.find(b => b.id == SUBSCRIPTION_PACK_ID.YEARLY)!.credits;
-        successMessage = `Elite Yearly Activated! ${creditsToAdd} Credits Added.`;
+        successMessage = `Elite Yearly Activated!`;
     } else if (isMonthly) {
         // Monthly gets 1000 bonus credits
         creditsToAdd = SUBSCRIPTION_PACK.find(b => b.id == SUBSCRIPTION_PACK_ID.MONTHLY)!.credits;
-        successMessage = `Elite Monthly Activated! ${creditsToAdd} Credits Added.`;
+        successMessage = `Elite Monthly Activated!`;
     } else {
         // Handle Consumables (Growth/Starter) if they appear in entitlements
         // Note: For pure consumables, ensure they are passed correctly or configured as non-renewing entitlements
@@ -561,16 +565,11 @@ const App: React.FC = () => {
 
     // 5. Persist to Database
     // We update both the boolean flag and the numeric credits count
-    await updateUserProfile({
-        id: profile.id,
-        is_premium: isPremium,
-        credits: newTotalCredits,
-        updated_at: new Date().toISOString()
-    });
+    await updateUserProfile(updatedProfile);
 
     // 6. User Feedback
     if (creditsToAdd > 0 || isPremium) {
-        alert(successMessage);
+        alert(`${successMessage}`);
     }
     
     setIsPaywallOpen(false);
