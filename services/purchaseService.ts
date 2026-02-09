@@ -1,5 +1,6 @@
-import { Purchases, LOG_LEVEL, PurchasesPackage, CustomerInfo } from '@revenuecat/purchases-capacitor';
+import { Purchases, LOG_LEVEL, PurchasesPackage, CustomerInfo, PurchasesEntitlementInfo } from '@revenuecat/purchases-capacitor';
 import { Capacitor } from '@capacitor/core';
+import { SUBSCRIPTION_PACK_ID } from '@/enum';
 
 // Replace with actual keys from RevenueCat Dashboard
 const REVENUECAT_KEYS = {
@@ -40,6 +41,17 @@ export const getActiveEntitlements = async (): Promise<string[]> => {
     return [];
   }
 };
+
+export const isPremiumUser = async (): Promise<boolean> => {
+  try{
+    const entitlements = await getActiveEntitlements();
+    return entitlements.length > 0 && (entitlements.includes(SUBSCRIPTION_PACK_ID.YEARLY) || entitlements.includes(SUBSCRIPTION_PACK_ID.MONTHLY));
+  }
+  catch(e){
+    console.error("RevenueCat: Failed to fetch offerings", e);
+    return false;
+  }
+}
 
 export const fetchCurrentOfferings = async () => {
   if (!Capacitor.isNativePlatform()) return null;
