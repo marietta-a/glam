@@ -567,6 +567,7 @@ const App: React.FC = () => {
     // We update both the boolean flag and the numeric credits count
     await updateUserProfile(updatedProfile);
 
+    setUploadTasks(prev => prev.filter(task => task.status !== 'error'));
     // 6. User Feedback
     if (creditsToAdd > 0 || isPremium) {
         alert(`${successMessage}`);

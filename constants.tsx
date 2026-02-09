@@ -3,7 +3,7 @@ import { Calendar, Crown, Sparkles, Zap } from 'lucide-react';
 import { WardrobeItem, Category, SubscriptionPack } from './types';
 import { SUBSCRIPTION_PACK_ID } from './enum';
 
-export const CATEGORIES: Category[] = ['All Items', 'Tops', 'Bottoms', 'Outerwear', 'Shoes', 'Dresses', 'Bags', 'Accessories', 'Caps'];
+export const CATEGORIES: Category[] = ['All Items', 'Tops', 'Bottoms', 'Outerwear', 'Shoes', 'Dresses', 'Bags', 'Caps', 'Accessories'];
 
 export const INITIAL_ITEMS: WardrobeItem[] = [];
 

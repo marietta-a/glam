@@ -1,5 +1,6 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { WardrobeItem, Outfit, Category, Occasion, UserProfile, ORDERED_OCCASIONS } from "../types";
+import { CATEGORIES } from "@/constants";
 
 export type RestorationMode = 'portrait' | 'repair' | 'upscale' | 'creative';
 export type StyleVibe = 'Studio' | 'Street' | 'Estate' | 'Minimal' | 'Sunset' | 'Paris' | 'Resort';
@@ -140,33 +141,35 @@ export const getBase64Data = async (urlOrBase64: string): Promise<string> => {
   });
 };
 
-const validateOutfitRules = (items: WardrobeItem[]): boolean => {
+const validateOutfitRules = (items: WardrobeItem[], isUniversal: boolean): boolean => {
   const categories = items.map(i => i.category);
-  const subCategories = items.map(i => (i.subCategory || '').toLowerCase());
-
+  
   const has = (cat: Category) => categories.includes(cat);
   const count = (cat: Category) => categories.filter(c => c === cat).length;
 
-  // RULE 1: No Duplicate IDs (Sanity Check)
+  // 1. DUPLICATE CHECK: No duplicate Item IDs
   const ids = items.map(i => i.id);
   if (new Set(ids).size !== ids.length) return false;
 
-  // RULE 2: Mutually Exclusive Core Pieces
-  // You cannot wear a Dress AND a Jumpsuit
-  // You cannot wear a Dress AND Bottoms (unless it's a specific layering style, but usually avoid for general logic)
-  // You cannot wear a Jumpsuit AND Top/Bottom
-  if (has('Dresses') && (has('Bottoms') || count('Dresses') > 1)) return false;
-  if (subCategories.includes('jumpsuit') && (has('Tops') || has('Bottoms') || has('Dresses'))) return false;
+  // 2. CORE LOGIC: The "Body" Rule
+  // An outfit must have EITHER a Dress OR (Top + Bottom).
+  if (has('Dresses')) {
+    if (has('Tops') || has('Bottoms')) return false; // Clash
+    if (count('Dresses') > 1) return false; // No double dresses
+  } else {
+    // If no dress, we generally need Top + Bottom
+    // Exception: In "Universal/Creative" mode, we allow just a Top (concept look) 
+    // but we generally reject Just Bottoms.
+    if (has('Tops') && !has('Bottoms') && !isUniversal) return false;
+    if (!has('Tops') && has('Bottoms') && !isUniversal) return false;
+    if (!has('Tops') && !has('Bottoms') && !has('Outerwear')) return false; // Must have something to wear
+  }
 
-  // RULE 3: Max one pair of shoes
+  // 3. LOGISTIC CONSTRAINTS
   if (count('Shoes') > 1) return false;
-
-  // RULE 4: Max one bag
   if (count('Bags') > 1) return false;
-
-  // RULE 5: At least one "Body Covering" item (Top, Dress, or Jumpsuit)
-  const hasCovering = has('Tops') || has('Dresses') || has('Outerwear') || subCategories.includes('jumpsuit');
-  if (!hasCovering) return false;
+  if (count('Caps') > 1) return false;
+  if (count('Outerwear') > 1) return false; // Usually 1 coat is enough
 
   return true;
 };
@@ -175,52 +178,48 @@ export const suggestOutfits = async (
   items: WardrobeItem[], 
   occasion: Occasion, 
   profile?: UserProfile | null,
-  avoidCombinations: string[] = [], // Comma separated IDs of previous outfits
+  avoidCombinations: string[] = [], 
   isUniversal: boolean = false
 ): Promise<{ outfits: Outfit[], noMoreCombinations: boolean }> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
-  // 1. Prepare Archive Data (Optimized for Tokens)
+  // 1. DATA PREP: Enriched Metadata for better AI matching
+  // We include pattern/material if available to help with texture matching
   const itemsText = items.slice(0, 400)
-    .map(i => `[${i.id}] ${i.category} (${i.subCategory || 'General'}): ${i.name.slice(0, 30)} - ${i.primaryColor}`)
+    .map(i => `[${i.id}] ${i.category}: ${i.name.slice(0, 30)} | Color: ${i.primaryColor || 'N/A'} | Vibe: ${i.materialLook || 'Standard'}`)
     .join('\n');
 
-  // 2. Define the Stylist Logic
+  // 2. THE "ELITE STYLIST" PROMPT
   const systemInstruction = `
-    ROLE: High-End Virtual Stylist.
-    OBJECTIVE: Create 6 unique, fashion-forward outfits for the occasion: "${occasion}".
+    ROLE: Elite Fashion Stylist (Vogue/GQ Standard).
+    TASK: Curate 6 distinct, high-cohesion outfits for occasion: "${occasion}".
     
-    INVENTORY RULES:
-    1. USE PROVIDED IDs ONLY. Do not hallucinate items.
-    2. VARIETY: Don't use the same "Top" in every outfit. Shuffle the pieces.
-    3. AVOID REPETITION: Do not recreate these exact ID combinations: [${avoidCombinations.join(' | ')}].
+    ARCHIVE CONTEXT:
+    You have access to these categories ONLY: ['Tops', 'Bottoms', 'Outerwear', 'Shoes', 'Dresses', 'Bags', 'Caps', 'Accessories'].
     
-    STYLING LOGIC (STRICT):
-    - CORE: Every outfit needs a base.
-      > Type A: Dress (1 piece)
-      > Type B: Jumpsuit (1 piece)
-      > Type C: Top + Bottom (2 pieces)
-    - LAYERING: You MAY add Outerwear (Jackets/Coats) to Type A, B, or C.
-    - FOOTWEAR: Include Shoes if available. If no shoes exist in archive, omit them (do not fail).
-    - ACCESSORIES: Add Bags/Hats to elevate the look.
+    STYLING ALGORITHM:
+    1. THE ANCHOR: Start with a "Hero Piece" (a Dress, or a strong Top+Bottom combo).
+    2. THE LAYER: Add 'Outerwear' only if it complements the silhouette and occasion (e.g., Blazer for Work, Denim Jacket for Casual).
+    3. THE FINISH: Add 'Shoes' (Mandatory if available), 'Bags', 'Caps', and 'Accessories'.
     
-    PROHIBITED COMBINATIONS (REALISM CHECK):
-    - NO Dresses + Pants.
-    - NO Jumpsuits + Tops.
-    - NO Multiple Shoes.
-    - NO Underwear/Innerwear as Outerwear unless specified.
-
-    EXCEPTION HANDLING:
-    - If the archive is small (e.g., only tops exist), create "Concept Looks" focusing on how that top could be styled, or pair tops with accessories. Do not force a Bottom if none exist.
+    STRICT RULES (VIOLATIONS = REJECTION):
+    - EXCLUSIVE: A 'Dress' takes the slot of both 'Tops' and 'Bottoms'. NEVER mix them.
+    - FOOTWEAR: Max 1 pair of 'Shoes'.
+    - HEADWEAR: 'Caps' are great for Casual/Street/Festival. Avoid for Formal/Job Interview unless it's a specific fashion statement.
+    - VARIETY: Do not reuse the same "Hero Piece" in more than 2 outfits.
     
-    OUTPUT FORMAT:
-    JSON Object: { "options": [{ "name": "Creative Headline", "itemIds": ["id1", "id2"], "stylistNotes": "Why this works..." }] }
+    EXCEPTION PROTOCOL (LOW INVENTORY):
+    - If shoes are missing in the archive, create the look without them. Do not hallucinate items.
+    - If only Tops exist, create "Portrait/Zoom Looks" (Top + Accessories + Cap).
+    
+    OUTPUT JSON FORMAT:
+    { "options": [{ "name": "Editorial Title", "itemIds": ["id1", "id2"], "stylistNotes": "Pitch this look in 10 words." }] }
   `;
 
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-flash-lite-latest', 
-      contents: `ARCHIVE:\n${itemsText}\n\nTask: Generate looks.`,
+      contents: `ARCHIVE INVENTORY:\n${itemsText}\n\nPREVIOUSLY SEEN COMBOS (AVOID):\n${avoidCombinations.join(' | ')}`,
       config: {
         systemInstruction,
         responseMimeType: "application/json",
@@ -248,27 +247,26 @@ export const suggestOutfits = async (
     const result = parseSafeJson(response.text || '') || { options: [] };
     const generatedOptions = result.options || [];
 
-    // 3. Post-Processing & Validation
+    // 3. POST-PROCESS VALIDATION ENGINE
     const validOutfits: Outfit[] = [];
     const seenCombinations = new Set(avoidCombinations);
 
     for (const opt of generatedOptions) {
-      // Map IDs to actual objects
+      // A. Hydrate Items
       const foundItems = (opt.itemIds || [])
         .map((id: string) => items.find(item => item.id === id))
         .filter(Boolean) as WardrobeItem[];
 
-      // Filter: Ensure we actually found the items
       if (foundItems.length === 0) continue;
 
-      // Filter: Check uniqueness of this specific combo
+      // B. Deduplication Check
       const comboSignature = foundItems.map(i => i.id).sort().join(',');
       if (seenCombinations.has(comboSignature)) continue;
 
-      // Filter: Run Logic Validator (The "No Jumpsuit + Pants" check)
-      if (!validateOutfitRules(foundItems)) continue;
+      // C. Logic Check (The Guard Rails)
+      if (!validateOutfitRules(foundItems, isUniversal)) continue;
 
-      // If passed all checks:
+      // D. Success
       seenCombinations.add(comboSignature);
       validOutfits.push({
         id: Math.random().toString(36).substr(2, 9),
@@ -278,13 +276,10 @@ export const suggestOutfits = async (
         occasion
       });
     }
-
-    // Heuristic: If we generated 0 valid outfits but sent items, it might be a rigid prompt issue.
-    // However, since we relaxed the "Must have shoes" rule in the prompt, this should return results even for partial archives.
     
     return { 
       outfits: validOutfits,
-      noMoreCombinations: validOutfits.length < generatedOptions.length // If we filtered some out, implies we might be hitting limits
+      noMoreCombinations: validOutfits.length < generatedOptions.length
     };
 
   } catch (error) {
@@ -422,13 +417,33 @@ export const processFaceReplacement = async (targetSceneBase64: string, avatarBa
   return `data:image/png;base64,${part.inlineData!.data}`;
 };
 
+// ... existing imports ... 
+// Ensure 'Type' is imported from @google/genai
+
 export const analyzeUpload = async (base64Image: string, lang: string = 'en'): Promise<Partial<WardrobeItem>[]> => {
   const { data, mimeType } = await resizeImageForAI(base64Image, 512); 
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  
+
   const response = await ai.models.generateContent({
-    model: 'gemini-2.5-flash-lite', //'gemini-3-pro-preview',
-    contents: { parts: [{ inlineData: { data, mimeType } }, { text: "Extract wardrobe items data. Return JSON." }] },
+    model: 'gemini-2.5-flash-lite',
+    contents: { 
+      parts: [
+        { inlineData: { data, mimeType } }, 
+        { text: `Analyze the clothing image. Identify items and return JSON. 
+          
+          RULES:
+          1. CATEGORY: Classify every item into exactly one of: ${CATEGORIES.join(', ')}.
+             - Map 'Pants', 'Skirts', 'Shorts' -> 'Bottoms'
+             - Map 'Shirts', 'Blouses', 'T-Shirts' -> 'Tops'
+             - Map 'Jackets', 'Coats', 'Blazers' -> 'Outerwear'
+             - Map 'Sneakers', 'Boots', 'Sandals' -> 'Shoes'
+             
+          2. OCCASION: For 'occasionSuitability', pick appropriate tags ONLY from this list: ${ORDERED_OCCASIONS.join(', ')}.
+             - Select multiple if applicable (e.g., a blazer can be 'Work' and 'Job Interview').
+          ` 
+        }
+      ] 
+    },
     config: {
       responseMimeType: "application/json",
       responseSchema: {
@@ -440,21 +455,32 @@ export const analyzeUpload = async (base64Image: string, lang: string = 'en'): P
               type: Type.OBJECT,
               properties: {
                 name: { type: Type.STRING },
-                category: { type: Type.STRING },
+                category: { 
+                  type: Type.STRING,
+                  enum: CATEGORIES 
+                },
                 primaryColor: { type: Type.STRING },
                 description: { type: Type.STRING },
                 materialLook: { type: Type.STRING },
                 pattern: { type: Type.STRING },
                 warmthLevel: { type: Type.STRING },
-                occasionSuitability: { type: Type.ARRAY, items: { type: Type.STRING } }
+                occasionSuitability: { 
+                  type: Type.ARRAY, 
+                  items: { 
+                    type: Type.STRING,
+                    // Enforce strict occasion list
+                    enum: ORDERED_OCCASIONS
+                  } 
+                }
               },
-              required: ["name", "category"]
+              required: ["name", "category", "occasionSuitability"]
             }
           }
         }
       }
     }
   });
+  
   const result = parseSafeJson(response.text || '') || { items: [] };
   return result.items;
 };
