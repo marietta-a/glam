@@ -124,10 +124,10 @@ const Paywall: React.FC<PaywallProps> = ({ isOpen, onClose, onPurchaseSuccess, l
       return { icon: <Calendar className="w-5 h-5" />, label: 'Monthly Elite', sub: 'Flexible' };
     }
     if (id.includes('growth')) {
-      return { icon: <Sparkles className="w-5 h-5" />, label: 'Growth Pack', sub: '200 Credits' };
+      return { icon: <Sparkles className="w-5 h-5" />, label: 'Growth Pack', sub: '1000 Credits' };
     }
     if (id.includes('starter')) {
-      return { icon: <Zap className="w-5 h-5" />, label: 'Starter Pack', sub: '59 Credits' };
+      return { icon: <Zap className="w-5 h-5" />, label: 'Starter Pack', sub: '200 Credits' };
     }
     // Fallback
     return { icon: <Coins className="w-5 h-5" />, label: pkg.product.title, sub: id };

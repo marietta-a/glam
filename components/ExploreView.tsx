@@ -192,16 +192,16 @@ const ExploreView: React.FC<ExploreViewProps> = ({ lang = 'en', profile, items =
   };
 
   return (
-    <div className="flex-1 flex flex-col space-y-16 py-12 px-7 pb-32 animate-in fade-in slide-in-from-bottom-6 duration-1000 bg-[#FBFBFB]">
+    <div className="flex-1 flex flex-col space-y-12 py-12 px-6 pb-32 animate-in fade-in slide-in-from-bottom-6 duration-1000 bg-[#FBFBFB]">
       
       {/* High-Contrast Editorial Header */}
       <div className="relative">
-        <div className="space-y-4">
+        <div className="space-y-3">
           <div className="flex items-center space-x-3">
-            <div className="w-12 h-0.5 bg-zinc-900" />
-            <span className="text-[11px] font-black text-zinc-900 uppercase tracking-[8px]">Protocol 5.6</span>
+            <div className="w-8 h-0.5 bg-zinc-900" />
+            <span className="text-[9px] font-black text-zinc-900 uppercase tracking-[6px]">Protocol 5.6</span>
           </div>
-          <h2 className="text-7xl font-black text-zinc-900 tracking-tighter leading-[0.8] uppercase italic">
+          <h2 className="text-6xl font-black text-zinc-900 tracking-tighter leading-[0.8] uppercase italic">
             Editorial <br /> 
             <span className="text-[#26A69A] not-italic">Lab</span>
           </h2>
@@ -209,100 +209,87 @@ const ExploreView: React.FC<ExploreViewProps> = ({ lang = 'en', profile, items =
       </div>
 
       {/* Tools Section */}
-      <section className="space-y-8">
-        <div className="flex items-center justify-between">
-           <div className="flex items-center space-x-3">
-              <Sparkles className="w-4 h-4 text-[#26A69A]" />
-              <h3 className="text-[11px] font-black text-zinc-900 uppercase tracking-[4px]">Active Engines</h3>
+      <section className="space-y-6">
+        <div className="flex items-center justify-between px-1">
+           <div className="flex items-center space-x-2">
+              <Sparkles className="w-3.5 h-3.5 text-[#26A69A]" />
+              <h3 className="text-[10px] font-black text-zinc-900 uppercase tracking-[3px]">Active Engines</h3>
            </div>
         </div>
         
-        <div className="space-y-6">
-          {/* HD Restore Card */}
-          <div className="group relative">
-             <button 
-               onClick={() => setActiveTool('restore')} 
-               className="w-full relative h-[220px] bg-zinc-900 rounded-[72px] overflow-hidden shadow-2xl transition-all active:scale-[0.97] group"
-             >
-                <div className="absolute inset-0 bg-gradient-to-br from-zinc-800 to-black" />
-                <div className="absolute top-0 right-0 p-12 opacity-10 group-hover:opacity-20 transition-opacity">
-                  <ImagePlus className="w-48 h-48 text-white" />
+        <div className="grid grid-cols-1 gap-4">
+          {/* HD Restore Card - COMPACT VERSION */}
+          <button 
+            onClick={() => setActiveTool('restore')} 
+            className="w-full relative h-36 bg-zinc-900 rounded-[32px] overflow-hidden shadow-2xl transition-all active:scale-[0.98] group text-left"
+          >
+            <div className="absolute inset-0 bg-gradient-to-br from-zinc-800 to-black" />
+            <div className="absolute -top-4 -right-4 p-6 opacity-10 group-hover:opacity-20 transition-opacity">
+                <ImagePlus className="w-32 h-32 text-white" />
+            </div>
+            
+            <div className="absolute inset-0 p-6 flex flex-col justify-between">
+                <div className="flex justify-between items-start">
+                    <div className="inline-flex items-center space-x-2 px-3 py-1 bg-white/10 backdrop-blur-md rounded-full border border-white/10">
+                        <div className="w-1.5 h-1.5 bg-[#26A69A] rounded-full animate-pulse" />
+                        <span className="text-[8px] font-black text-white uppercase tracking-[3px]">HD RESTORE</span>
+                    </div>
+                    <div className="w-8 h-8 bg-[#26A69A] text-white rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
+                        <Maximize2 className="w-4 h-4" />
+                    </div>
                 </div>
                 
-                <div className="absolute inset-0 p-12 flex flex-col justify-between text-left">
-                   <div className="space-y-4">
-                      <div className="inline-flex items-center space-x-2 px-4 py-2 bg-white/10 backdrop-blur-md rounded-full border border-white/10">
-                         <div className="w-2 h-2 bg-[#26A69A] rounded-full animate-pulse" />
-                         <span className="text-[10px] font-black text-white uppercase tracking-[4px]">HD RESTORE V3.1</span>
-                      </div>
-                   
-                   <div className="flex items-end justify-between">
-                      <h5 className="text-4xl font-black text-white uppercase tracking-tight leading-[0.9]">Portrait <br/> Master</h5>
-                      <div className="w-16 h-16 bg-[#26A69A] text-white rounded-[28px] flex items-center justify-center shadow-2xl group-hover:scale-110 transition-transform">
-                         <Maximize2 className="w-6 h-6" />
-                      </div>
-                   </div>
-                   </div>
-                </div>
-             </button>
-          </div>
+                <h5 className="text-2xl font-black text-white uppercase tracking-tight leading-none">Portrait <br/> Master</h5>
+            </div>
+          </button>
 
-          {/* Identity Shifter Card */}
-          <div className="group relative">
-             <button 
-               onClick={() => setActiveTool('identity')} 
-               className="w-full relative h-[220px] bg-white border border-gray-100 rounded-[72px] overflow-hidden shadow-xl transition-all active:scale-[0.97] group"
-             >
-                <div className="absolute inset-0 bg-gradient-to-tr from-gray-50 to-transparent" />
-                <div className="absolute top-0 right-0 p-12 opacity-5 group-hover:opacity-10 transition-opacity">
-                  <UserCog className="w-48 h-48 text-zinc-900" />
+          {/* Identity Shifter Card - COMPACT VERSION */}
+          <button 
+            onClick={() => setActiveTool('identity')} 
+            className="w-full relative h-36 bg-white border border-gray-100 rounded-[32px] overflow-hidden shadow-xl transition-all active:scale-[0.98] group text-left"
+          >
+            <div className="absolute inset-0 bg-gradient-to-tr from-gray-50 to-transparent" />
+            <div className="absolute -top-4 -right-4 p-6 opacity-5 group-hover:opacity-10 transition-opacity">
+                <UserCog className="w-32 h-32 text-zinc-900" />
+            </div>
+            
+            <div className="absolute inset-0 p-6 flex flex-col justify-between">
+                <div className="flex justify-between items-start">
+                    <div className="inline-flex items-center space-x-2 px-3 py-1 bg-zinc-900 backdrop-blur-md rounded-full">
+                        <div className="w-1.5 h-1.5 bg-amber-400 rounded-full animate-pulse" />
+                        <span className="text-[8px] font-black text-white uppercase tracking-[3px]">IDENTITY LAB</span>
+                    </div>
+                    <div className="w-8 h-8 bg-zinc-900 text-white rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
+                        <UserCog className="w-4 h-4" />
+                    </div>
                 </div>
                 
-                <div className="absolute inset-0 p-12 flex flex-col justify-between text-left">
-                   <div className="space-y-4">
-                      <div className="inline-flex items-center space-x-2 px-4 py-2 bg-zinc-900 backdrop-blur-md rounded-full">
-                         <div className="w-2 h-2 bg-amber-400 rounded-full animate-pulse" />
-                         <span className="text-[10px] font-black text-white uppercase tracking-[4px]">IDENTITY LAB</span>
-                      </div>
-                   
-                   <div className="flex items-end justify-between">
-                      <h5 className="text-4xl font-black text-zinc-900 uppercase tracking-tight leading-[0.9]">Identity <br/> Shifter</h5>
-                      <div className="w-16 h-16 bg-zinc-900 text-white rounded-[28px] flex items-center justify-center shadow-xl group-hover:scale-110 transition-transform">
-                         <UserCog className="w-6 h-6" />
-                      </div>
-                   </div>
-                   </div>
-                </div>
-             </button>
-          </div>
+                <h5 className="text-2xl font-black text-zinc-900 uppercase tracking-tight leading-none">Identity <br/> Shifter</h5>
+            </div>
+          </button>
         </div>
       </section>
 
       {/* History Track - Conditionally displayed based on content */}
       {lastProcessedImage && (
-        <section className="space-y-8 pt-12 border-t border-zinc-100 animate-in fade-in slide-in-from-bottom-4 duration-700">
+        <section className="space-y-4 pt-8 border-t border-zinc-100 animate-in fade-in slide-in-from-bottom-4 duration-700">
            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-4">
-                 <History className="w-5 h-5 text-zinc-900" />
-                 <h3 className="text-xs font-black text-zinc-900 uppercase tracking-[5px]">Lab History</h3>
+              <div className="flex items-center space-x-3">
+                 <History className="w-4 h-4 text-zinc-900" />
+                 <h3 className="text-[10px] font-black text-zinc-900 uppercase tracking-[4px]">Lab History</h3>
               </div>
-              <button onClick={clearArchive} className="text-[10px] font-black text-zinc-300 uppercase tracking-widest hover:text-red-500 transition-colors">Wipe Memory</button>
+              <button onClick={clearArchive} className="text-[9px] font-black text-zinc-300 uppercase tracking-widest hover:text-red-500 transition-colors">Wipe Memory</button>
            </div>
 
-           <div className="group relative aspect-[3/4] bg-white rounded-[80px] overflow-hidden shadow-[0_40px_100px_-20px_rgba(0,0,0,0.15)] border-[16px] border-white transition-all duration-700">
-              <img src={lastProcessedImage} className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-105" />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent flex flex-col justify-end p-12 opacity-0 group-hover:opacity-100 transition-all duration-500">
-                 <div className="space-y-6">
-                    <div className="flex flex-col space-y-2">
-                       <span className="text-[10px] font-black text-[#26A69A] uppercase tracking-[5px]">Render Complete</span>
-                       <h4 className="text-2xl font-black text-white uppercase tracking-tight">Campaign Asset</h4>
-                    </div>
-                    <button onClick={() => handleDownloadImage(lastProcessedImage)} className="w-full py-6 bg-white text-zinc-900 rounded-[32px] font-black uppercase tracking-widest text-[11px] shadow-2xl flex items-center justify-center space-x-3 active:scale-95 transition-all">
-                       <Download className="w-5 h-5" />
-                       <span>Save to Archive</span>
-                    </button>
-                 </div>
+           <div className="group relative h-24 bg-white rounded-[24px] overflow-hidden shadow-sm border border-gray-100 flex items-center pr-4">
+              <img src={lastProcessedImage} className="w-24 h-full object-cover" />
+              <div className="flex-1 pl-4 flex flex-col justify-center space-y-1">
+                 <span className="text-[8px] font-black text-[#26A69A] uppercase tracking-widest">Cached Asset</span>
+                 <h4 className="text-sm font-bold text-zinc-900">Latest Render</h4>
               </div>
+              <button onClick={() => handleDownloadImage(lastProcessedImage)} className="p-3 bg-gray-50 text-zinc-900 rounded-full active:scale-95 transition-transform">
+                 <Download className="w-4 h-4" />
+              </button>
            </div>
         </section>
       )}
@@ -313,9 +300,9 @@ const ExploreView: React.FC<ExploreViewProps> = ({ lang = 'en', profile, items =
           <div className="bg-white w-full h-full sm:max-w-sm sm:h-[92vh] sm:rounded-[72px] overflow-hidden shadow-2xl relative flex flex-col">
             
             {/* Header */}
-            <div className="px-12 pt-16 pb-12 flex items-start justify-between bg-white z-10">
+            <div className="px-8 pt-12 pb-8 flex items-start justify-between bg-white z-10">
               <div className="space-y-2">
-                <h2 className="text-4xl font-black text-zinc-900 tracking-tight leading-none italic uppercase">
+                <h2 className="text-3xl font-black text-zinc-900 tracking-tight leading-none italic uppercase">
                   {activeTool === 'restore' ? (
                     <><span className="font-bold">HD</span> <span className="text-[#26A69A] not-italic">RESTORE</span></>
                   ) : (
@@ -323,38 +310,38 @@ const ExploreView: React.FC<ExploreViewProps> = ({ lang = 'en', profile, items =
                   )}
                 </h2>
                 <div className="flex items-center space-x-3">
-                   <div className={`w-2.5 h-2.5 rounded-full ${activeTool === 'restore' ? 'bg-[#26A69A]' : 'bg-amber-500'}`} />
-                   <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-[6px]">
+                   <div className={`w-2 h-2 rounded-full ${activeTool === 'restore' ? 'bg-[#26A69A]' : 'bg-amber-500'}`} />
+                   <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-[4px]">
                      {activeTool === 'restore' ? 'GROUP PROTOCOL ENGINE' : 'CAREER LENS ENGINE'}
                    </span>
                 </div>
               </div>
-              <button onClick={resetLab} className="p-4 bg-gray-50 rounded-full active:scale-90 transition-transform">
-                <X className="w-7 h-7 text-gray-400" />
+              <button onClick={resetLab} className="p-3 bg-gray-50 rounded-full active:scale-90 transition-transform">
+                <X className="w-6 h-6 text-gray-400" />
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-12 pt-0 space-y-16 custom-scrollbar pb-32">
+            <div className="flex-1 overflow-y-auto px-8 pt-0 space-y-12 custom-scrollbar pb-32">
               {isProcessing ? (
-                <div className="py-24 flex flex-col items-center justify-center text-center space-y-16">
+                <div className="py-20 flex flex-col items-center justify-center text-center space-y-12">
                   <div className="relative">
-                    <div className={`w-40 h-40 border-2 border-zinc-100 rounded-full animate-spin ${activeTool === 'restore' ? 'border-t-[#26A69A]' : 'border-t-amber-500'}`} />
-                    <Wand2 className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-12 h-12 animate-pulse ${activeTool === 'restore' ? 'text-[#26A69A]' : 'text-amber-500'}`} />
+                    <div className={`w-32 h-32 border-2 border-zinc-100 rounded-full animate-spin ${activeTool === 'restore' ? 'border-t-[#26A69A]' : 'border-t-amber-500'}`} />
+                    <Wand2 className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-10 h-10 animate-pulse ${activeTool === 'restore' ? 'text-[#26A69A]' : 'text-amber-500'}`} />
                   </div>
-                  <div className="space-y-6">
-                    <h3 className="text-md font-black text-zinc-900 uppercase tracking-[6px]">
+                  <div className="space-y-4">
+                    <h3 className="text-xs font-black text-zinc-900 uppercase tracking-[4px]">
                       {activeTool === 'restore' ? RESTORE_STEPS[processingIndex] : IDENTITY_STEPS[processingIndex]}
                     </h3>
                   </div>
                 </div>
               ) : resultImage ? (
-                <div className="flex flex-col items-center space-y-8 animate-in fade-in zoom-in duration-500 py-4">
+                <div className="flex flex-col items-center space-y-6 animate-in fade-in zoom-in duration-500 py-4">
                    <div className="flex items-center space-x-2 px-4 py-1.5 bg-green-50 rounded-full border border-green-100">
-                      <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                      <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
                       <span className="text-[9px] font-black text-green-600 uppercase tracking-widest">Render Complete</span>
                    </div>
 
-                   <div className="relative w-full aspect-[3/4] rounded-[48px] overflow-hidden shadow-2xl border-4 border-white group">
+                   <div className="relative w-full aspect-[3/4] rounded-[40px] overflow-hidden shadow-xl border-4 border-white group">
                      <img src={resultImage} className="w-full h-full object-cover" />
                      <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                    </div>
@@ -362,25 +349,25 @@ const ExploreView: React.FC<ExploreViewProps> = ({ lang = 'en', profile, items =
                    <div className="w-full space-y-3">
                      <button 
                         onClick={() => handleDownloadImage(resultImage)}
-                        className="w-full py-6 bg-zinc-900 text-white font-black uppercase tracking-[4px] text-[11px] rounded-[32px] shadow-xl active:scale-95 transition-all flex items-center justify-center space-x-3 hover:bg-[#26A69A]"
+                        className="w-full py-5 bg-zinc-900 text-white font-black uppercase tracking-[3px] text-[10px] rounded-[28px] shadow-xl active:scale-95 transition-all flex items-center justify-center space-x-3 hover:bg-[#26A69A]"
                      >
-                       <Download className="w-5 h-5" />
+                       <Download className="w-4 h-4" />
                        <span>Save Asset</span>
                      </button>
                      <button 
                         onClick={resetLab}
-                        className="w-full py-4 text-gray-400 font-black uppercase tracking-[3px] text-[10px] hover:text-gray-600 transition-colors"
+                        className="w-full py-3 text-gray-400 font-black uppercase tracking-[3px] text-[9px] hover:text-gray-600 transition-colors"
                      >
                         Close Studio
                      </button>
                    </div>
                 </div>
               ) : (
-                <div className="space-y-12">
+                <div className="space-y-10">
                   {/* Source Asset Input */}
                   <div 
                     onClick={() => restoreInputRef.current?.click()} 
-                    className="aspect-square bg-gray-50 rounded-[72px] border-2 border-dashed border-gray-100 flex flex-col items-center justify-center group cursor-pointer relative overflow-hidden transition-all hover:bg-gray-100/50"
+                    className="aspect-square bg-gray-50 rounded-[48px] border-2 border-dashed border-gray-100 flex flex-col items-center justify-center group cursor-pointer relative overflow-hidden transition-all hover:bg-gray-100/50"
                   >
                     {restoreState.source ? (
                       <img src={restoreState.source} className="w-full h-full object-cover" />
@@ -389,13 +376,13 @@ const ExploreView: React.FC<ExploreViewProps> = ({ lang = 'en', profile, items =
                         <div className="w-full h-full relative">
                            <img src={profile.avatar_url} className="w-full h-full object-cover opacity-50 grayscale group-hover:grayscale-0 transition-all duration-500" />
                            <div className="absolute inset-0 flex items-center justify-center bg-black/10">
-                              <span className="bg-white/90 px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest">Using Profile Avatar</span>
+                              <span className="bg-white/90 px-4 py-2 rounded-full text-[9px] font-black uppercase tracking-widest">Using Profile Avatar</span>
                            </div>
                         </div>
                       ) : (
-                        <div className="flex flex-col items-center space-y-4">
-                          <CameraIcon className="w-12 h-12 text-gray-200 group-hover:scale-110 transition-transform" />
-                          <span className="text-[10px] font-black text-gray-300 uppercase tracking-widest">Select Target Shot</span>
+                        <div className="flex flex-col items-center space-y-3">
+                          <CameraIcon className="w-10 h-10 text-gray-200 group-hover:scale-110 transition-transform" />
+                          <span className="text-[9px] font-black text-gray-300 uppercase tracking-widest">Select Target Shot</span>
                         </div>
                       )
                     )}
@@ -403,15 +390,15 @@ const ExploreView: React.FC<ExploreViewProps> = ({ lang = 'en', profile, items =
                   <input type="file" ref={restoreInputRef} onChange={(e) => { const f = e.target.files?.[0]; if(f) { const r = new FileReader(); r.onload = () => setRestoreState(prev => ({ ...prev, source: r.result as string })); r.readAsDataURL(f); } }} className="hidden" accept="image/*" />
 
                   {/* Options Selector */}
-                  <section className="space-y-10">
-                    <div className="flex items-center space-x-4 px-1">
-                       {activeTool === 'restore' ? <Sun className="w-6 h-6 text-[#26A69A]" /> : <UserCog className="w-6 h-6 text-amber-500" />}
-                       <p className="text-[12px] font-black text-zinc-400 uppercase tracking-[8px]">
+                  <section className="space-y-6">
+                    <div className="flex items-center space-x-3 px-1">
+                       {activeTool === 'restore' ? <Sun className="w-5 h-5 text-[#26A69A]" /> : <UserCog className="w-5 h-5 text-amber-500" />}
+                       <p className="text-[10px] font-black text-zinc-400 uppercase tracking-[4px]">
                          {activeTool === 'restore' ? 'EDITORIAL PALETTE' : 'CAREER LENS'}
                        </p>
                     </div>
                     
-                    <div className="flex space-x-6 overflow-x-auto no-scrollbar -mx-6 px-6 pb-4">
+                    <div className="flex space-x-4 overflow-x-auto no-scrollbar -mx-6 px-6 pb-4">
                        {activeTool === 'restore' ? (
                          STYLE_VIBES.map(vibe => {
                            const isActive = selectedVibe === vibe.id;
@@ -419,14 +406,14 @@ const ExploreView: React.FC<ExploreViewProps> = ({ lang = 'en', profile, items =
                              <button 
                                key={vibe.id} 
                                onClick={() => setSelectedVibe(vibe.id)} 
-                               className={`flex-shrink-0 flex flex-col items-center space-y-6 p-8 w-32 rounded-[64px] transition-all duration-300 ${
-                                 isActive ? 'bg-zinc-900 text-white shadow-2xl scale-110 z-10' : 'bg-gray-50/50 text-zinc-300'
+                               className={`flex-shrink-0 flex flex-col items-center space-y-4 p-6 w-28 rounded-[32px] transition-all duration-300 ${
+                                 isActive ? 'bg-zinc-900 text-white shadow-xl scale-105 z-10' : 'bg-gray-50/50 text-zinc-300'
                                }`}
                              >
-                               <div className={`p-3 rounded-2xl ${isActive ? 'bg-white/10' : 'bg-white shadow-sm'}`}>
+                               <div className={`p-2.5 rounded-xl ${isActive ? 'bg-white/10' : 'bg-white shadow-sm'}`}>
                                   {vibe.icon}
                                </div>
-                               <span className="text-[10px] font-black uppercase tracking-[3px]">{vibe.label}</span>
+                               <span className="text-[9px] font-black uppercase tracking-[2px]">{vibe.label}</span>
                              </button>
                            );
                          })
@@ -437,14 +424,14 @@ const ExploreView: React.FC<ExploreViewProps> = ({ lang = 'en', profile, items =
                              <button 
                                key={occ.id} 
                                onClick={() => setSelectedOccupation(occ.id)} 
-                               className={`flex-shrink-0 flex flex-col items-center space-y-6 p-8 w-32 rounded-[64px] transition-all duration-300 ${
-                                 isActive ? 'bg-zinc-900 text-white shadow-2xl scale-110 z-10' : 'bg-gray-50/50 text-zinc-300'
+                               className={`flex-shrink-0 flex flex-col items-center space-y-4 p-6 w-28 rounded-[32px] transition-all duration-300 ${
+                                 isActive ? 'bg-zinc-900 text-white shadow-xl scale-105 z-10' : 'bg-gray-50/50 text-zinc-300'
                                }`}
                              >
-                               <div className={`p-3 rounded-2xl ${isActive ? 'bg-white/10' : 'bg-white shadow-sm'}`}>
+                               <div className={`p-2.5 rounded-xl ${isActive ? 'bg-white/10' : 'bg-white shadow-sm'}`}>
                                   {occ.icon}
                                </div>
-                               <span className="text-[10px] font-black uppercase tracking-[3px] text-center leading-tight">{occ.label}</span>
+                               <span className="text-[9px] font-black uppercase tracking-[2px] text-center leading-tight">{occ.label}</span>
                              </button>
                            );
                          })
@@ -453,21 +440,21 @@ const ExploreView: React.FC<ExploreViewProps> = ({ lang = 'en', profile, items =
                   </section>
                   
                   {/* Context & Execute */}
-                  <div className="space-y-6">
+                  <div className="space-y-4">
                      {activeTool === 'restore' && (
-                       <div className="bg-gray-50/50 p-8 rounded-[40px] border border-gray-100">
+                       <div className="bg-gray-50/50 p-6 rounded-[32px] border border-gray-100">
                           <textarea 
                              value={userRequest}
                              onChange={(e) => setUserRequest(e.target.value)}
                              placeholder="Editorial Notes (e.g Happy Birthday!)..."
-                             className="w-full bg-transparent border-none p-0 text-sm font-serif italic text-zinc-500 outline-none placeholder:text-zinc-300 resize-none h-16"
+                             className="w-full bg-transparent border-none p-0 text-sm font-serif italic text-zinc-500 outline-none placeholder:text-zinc-300 resize-none h-12"
                           />
                        </div>
                      )}
                      <button 
                         disabled={activeTool === 'restore' && !restoreState.source} 
                         onClick={activeTool === 'restore' ? handleRestore : handleIdentityShift}
-                        className={`w-full py-8 text-white font-black uppercase tracking-[8px] text-[13px] rounded-[48px] active:scale-95 disabled:opacity-50 transition-all shadow-xl ${
+                        className={`w-full py-6 text-white font-black uppercase tracking-[4px] text-[11px] rounded-[32px] active:scale-95 disabled:opacity-50 transition-all shadow-xl ${
                           activeTool === 'restore' ? 'bg-zinc-900' : 'bg-amber-500 shadow-amber-500/30'
                         }`}
                       >

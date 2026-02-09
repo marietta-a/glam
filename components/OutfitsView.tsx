@@ -204,90 +204,94 @@ const OutfitsView: React.FC<OutfitsViewProps> = ({
   };
 
   // ... (Keep existing empty state checks) ...
-  if (items.length < 2) {
+if (items.length < 2) {
     const progress = Math.min((items.length / 2) * 100, 100);
     
     return (
-      <div className="flex-1 flex flex-col p-6 min-h-[80vh] animate-in fade-in duration-1000 relative overflow-hidden">
+      // Changed to h-full to fill available space exactly, justify-between to distribute elements
+      <div className="h-full flex flex-col p-6 animate-in fade-in duration-1000 relative overflow-hidden justify-between">
+        
         {/* Background Elements */}
         <div className="absolute top-0 right-0 w-64 h-64 bg-[#26A69A]/5 rounded-full blur-3xl -z-10" />
         <div className="absolute bottom-0 left-0 w-48 h-48 bg-amber-500/5 rounded-full blur-3xl -z-10" />
 
-        {/* Hero Section */}
-        <div className="mt-4 mb-8 text-center space-y-4">
-          <div className="inline-flex items-center justify-center p-3 bg-white shadow-lg shadow-teal-900/5 rounded-2xl mb-4 animate-bounce-subtle">
+        {/* Hero Section - Compacted margins */}
+        <div className="text-center space-y-3 pt-2">
+          <div className="inline-flex items-center justify-center p-3 bg-white shadow-lg shadow-teal-900/5 rounded-2xl mb-2 animate-bounce-subtle">
             <Sparkles className="w-6 h-6 text-[#26A69A]" />
           </div>
-          <h2 className="text-4xl font-black text-gray-900 tracking-tight leading-none uppercase">
+          <h2 className="text-3xl sm:text-4xl font-black text-gray-900 tracking-tight leading-none uppercase">
             Initialize <br/>
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#26A69A] to-teal-600">Style Engine</span>
           </h2>
-          <p className="text-xs text-gray-500 font-medium px-8 leading-relaxed">
+          <p className="text-[11px] text-gray-500 font-medium px-4 leading-relaxed max-w-xs mx-auto">
             Your digital stylist requires archival data. Digitize at least 2 wardrobe pieces to activate the neural mixing core.
           </p>
         </div>
 
-        {/* Progress Card */}
-        <div className="bg-white rounded-[32px] p-6 shadow-xl shadow-gray-200/50 border border-white mb-8 relative overflow-hidden">
+        {/* Progress Card - Centered via auto margins if space allows */}
+        <div className="w-full bg-white rounded-[32px] p-5 shadow-xl shadow-gray-200/50 border border-white relative overflow-hidden my-auto">
            <div className="absolute top-0 left-0 right-0 h-1 bg-gray-100">
              <div className="h-full bg-[#26A69A] transition-all duration-1000" style={{ width: `${progress}%` }} />
            </div>
            
-           <div className="flex justify-between items-center mb-6 pt-2">
+           <div className="flex justify-between items-center mb-5 pt-1">
               <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">System Status</span>
               <span className="px-3 py-1 bg-gray-50 rounded-full text-[9px] font-black text-gray-900 uppercase tracking-widest border border-gray-100">
                 {items.length}/2 Items Ready
               </span>
            </div>
 
-           <div className="space-y-4">
-              <div className={`flex items-center p-3 rounded-2xl transition-all ${items.length > 0 ? 'bg-teal-50 border border-teal-100' : 'bg-gray-50 border border-dashed border-gray-200'}`}>
-                 <div className={`w-8 h-8 rounded-xl flex items-center justify-center mr-4 ${items.length > 0 ? 'bg-[#26A69A] text-white' : 'bg-white text-gray-300'}`}>
+           <div className="space-y-3">
+              <div className={`flex items-center p-2.5 rounded-2xl transition-all ${items.length > 0 ? 'bg-teal-50 border border-teal-100' : 'bg-gray-50 border border-dashed border-gray-200'}`}>
+                 <div className={`w-8 h-8 rounded-xl flex items-center justify-center mr-3 ${items.length > 0 ? 'bg-[#26A69A] text-white' : 'bg-white text-gray-300'}`}>
                     <Shirt className="w-4 h-4" />
                  </div>
                  <div className="flex-1">
-                    <h4 className={`text-xs font-bold ${items.length > 0 ? 'text-gray-900' : 'text-gray-400'}`}>
+                    <h4 className={`text-[11px] font-bold ${items.length > 0 ? 'text-gray-900' : 'text-gray-400'}`}>
                        {items.length > 0 ? 'First Asset Archived' : 'Upload First Piece'}
                     </h4>
-                    <p className="text-[9px] text-gray-400 uppercase tracking-wide mt-0.5">Top / Bottom / Dress</p>
+                    <p className="text-[8px] text-gray-400 uppercase tracking-wide">Top / Bottom / Dress</p>
                  </div>
                  {items.length > 0 && <CheckCircle2 className="w-4 h-4 text-[#26A69A]" />}
               </div>
 
-              <div className={`flex items-center p-3 rounded-2xl transition-all ${items.length > 1 ? 'bg-teal-50 border border-teal-100' : 'bg-gray-50 border border-dashed border-gray-200'}`}>
-                 <div className={`w-8 h-8 rounded-xl flex items-center justify-center mr-4 ${items.length > 1 ? 'bg-[#26A69A] text-white' : 'bg-white text-gray-300'}`}>
+              <div className={`flex items-center p-2.5 rounded-2xl transition-all ${items.length > 1 ? 'bg-teal-50 border border-teal-100' : 'bg-gray-50 border border-dashed border-gray-200'}`}>
+                 <div className={`w-8 h-8 rounded-xl flex items-center justify-center mr-3 ${items.length > 1 ? 'bg-[#26A69A] text-white' : 'bg-white text-gray-300'}`}>
                     <Layers className="w-4 h-4" />
                  </div>
                  <div className="flex-1">
-                    <h4 className={`text-xs font-bold ${items.length > 1 ? 'text-gray-900' : 'text-gray-400'}`}>
+                    <h4 className={`text-[11px] font-bold ${items.length > 1 ? 'text-gray-900' : 'text-gray-400'}`}>
                        {items.length > 1 ? 'Archive Ready' : 'Upload Second Piece'}
                     </h4>
-                    <p className="text-[9px] text-gray-400 uppercase tracking-wide mt-0.5">Complementary Item</p>
+                    <p className="text-[8px] text-gray-400 uppercase tracking-wide">Complementary Item</p>
                  </div>
                  {items.length > 1 && <CheckCircle2 className="w-4 h-4 text-[#26A69A]" />}
               </div>
            </div>
         </div>
 
-        {/* Feature Tease */}
-        <div className="grid grid-cols-2 gap-3 mb-auto">
-           <div className="bg-gray-50 p-4 rounded-[24px] border border-gray-100 flex flex-col items-center text-center space-y-2">
-              <Wand2 className="w-5 h-5 text-amber-500" />
-              <p className="text-[9px] font-bold text-gray-900 leading-tight">AI Outfit<br/>Generation</p>
-           </div>
-           <div className="bg-gray-50 p-4 rounded-[24px] border border-gray-100 flex flex-col items-center text-center space-y-2">
-              <Globe className="w-5 h-5 text-indigo-500" />
-              <p className="text-[9px] font-bold text-gray-900 leading-tight">Virtual<br/>Try-On</p>
-           </div>
-        </div>
+        {/* Bottom Section: Features & CTA */}
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+             <div className="bg-gray-50 p-3 rounded-[24px] border border-gray-100 flex flex-col items-center text-center space-y-1">
+                <Wand2 className="w-4 h-4 text-amber-500" />
+                <p className="text-[9px] font-bold text-gray-900 leading-tight">AI Outfit<br/>Generation</p>
+             </div>
+             <div className="bg-gray-50 p-3 rounded-[24px] border border-gray-100 flex flex-col items-center text-center space-y-1">
+                <Globe className="w-4 h-4 text-indigo-500" />
+                <p className="text-[9px] font-bold text-gray-900 leading-tight">Virtual<br/>Try-On</p>
+             </div>
+          </div>
 
-        <button 
-          onClick={onAddClick} 
-          className="w-full py-6 bg-zinc-900 text-white font-black uppercase tracking-[3px] text-[11px] rounded-[32px] shadow-2xl active:scale-95 flex items-center justify-center space-x-3 group transition-all hover:bg-[#26A69A]"
-        >
-          <Camera className="w-4 h-4" />
-          <span>Launch Camera Protocol</span>
-        </button>
+          <button 
+            onClick={onAddClick} 
+            className="w-full py-5 bg-zinc-900 text-white font-black uppercase tracking-[3px] text-[10px] rounded-[32px] shadow-2xl active:scale-95 flex items-center justify-center space-x-3 group transition-all hover:bg-[#26A69A]"
+          >
+            <Camera className="w-4 h-4" />
+            <span>Launch Camera Protocol</span>
+          </button>
+        </div>
       </div>
     );
   }
