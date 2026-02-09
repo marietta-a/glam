@@ -205,42 +205,88 @@ const OutfitsView: React.FC<OutfitsViewProps> = ({
 
   // ... (Keep existing empty state checks) ...
   if (items.length < 2) {
-    // ... same as before
+    const progress = Math.min((items.length / 2) * 100, 100);
+    
     return (
-      <div className="flex-1 flex flex-col p-8 space-y-12 min-h-[75vh] animate-in fade-in duration-1000">
-        <div className="space-y-3">
-          <div className="flex items-center space-x-2">
-            <div className="w-8 h-px bg-[#26A69A]" />
-            <span className="text-[10px] font-black text-[#26A69A] uppercase tracking-[4px]">Digital Protocol</span>
+      <div className="flex-1 flex flex-col p-6 min-h-[80vh] animate-in fade-in duration-1000 relative overflow-hidden">
+        {/* Background Elements */}
+        <div className="absolute top-0 right-0 w-64 h-64 bg-[#26A69A]/5 rounded-full blur-3xl -z-10" />
+        <div className="absolute bottom-0 left-0 w-48 h-48 bg-amber-500/5 rounded-full blur-3xl -z-10" />
+
+        {/* Hero Section */}
+        <div className="mt-4 mb-8 text-center space-y-4">
+          <div className="inline-flex items-center justify-center p-3 bg-white shadow-lg shadow-teal-900/5 rounded-2xl mb-4 animate-bounce-subtle">
+            <Sparkles className="w-6 h-6 text-[#26A69A]" />
           </div>
-          <h2 className="text-4xl font-black text-gray-900 tracking-tight leading-none uppercase">The Style <br /> Architect</h2>
+          <h2 className="text-4xl font-black text-gray-900 tracking-tight leading-none uppercase">
+            Initialize <br/>
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#26A69A] to-teal-600">Style Engine</span>
+          </h2>
+          <p className="text-xs text-gray-500 font-medium px-8 leading-relaxed">
+            Your digital stylist requires archival data. Digitize at least 2 wardrobe pieces to activate the neural mixing core.
+          </p>
         </div>
-        <div className="space-y-8">
-           <div className="flex items-start space-x-6 relative group">
-              <div className="absolute left-6 top-14 bottom-[-1.5rem] w-px bg-gray-100 group-hover:bg-[#26A69A]/30 transition-colors" />
-              <div className="w-12 h-12 bg-zinc-900 text-white rounded-[18px] flex flex-shrink-0 items-center justify-center shadow-xl z-10 transition-transform group-hover:scale-110">
-                 <Shirt className="w-5 h-5" />
+
+        {/* Progress Card */}
+        <div className="bg-white rounded-[32px] p-6 shadow-xl shadow-gray-200/50 border border-white mb-8 relative overflow-hidden">
+           <div className="absolute top-0 left-0 right-0 h-1 bg-gray-100">
+             <div className="h-full bg-[#26A69A] transition-all duration-1000" style={{ width: `${progress}%` }} />
+           </div>
+           
+           <div className="flex justify-between items-center mb-6 pt-2">
+              <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">System Status</span>
+              <span className="px-3 py-1 bg-gray-50 rounded-full text-[9px] font-black text-gray-900 uppercase tracking-widest border border-gray-100">
+                {items.length}/2 Items Ready
+              </span>
+           </div>
+
+           <div className="space-y-4">
+              <div className={`flex items-center p-3 rounded-2xl transition-all ${items.length > 0 ? 'bg-teal-50 border border-teal-100' : 'bg-gray-50 border border-dashed border-gray-200'}`}>
+                 <div className={`w-8 h-8 rounded-xl flex items-center justify-center mr-4 ${items.length > 0 ? 'bg-[#26A69A] text-white' : 'bg-white text-gray-300'}`}>
+                    <Shirt className="w-4 h-4" />
+                 </div>
+                 <div className="flex-1">
+                    <h4 className={`text-xs font-bold ${items.length > 0 ? 'text-gray-900' : 'text-gray-400'}`}>
+                       {items.length > 0 ? 'First Asset Archived' : 'Upload First Piece'}
+                    </h4>
+                    <p className="text-[9px] text-gray-400 uppercase tracking-wide mt-0.5">Top / Bottom / Dress</p>
+                 </div>
+                 {items.length > 0 && <CheckCircle2 className="w-4 h-4 text-[#26A69A]" />}
               </div>
-              <div className="pt-1">
-                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Step 01</p>
-                <h4 className="text-sm font-black text-gray-900 uppercase">Archive Digitization</h4>
-                <p className="text-xs text-gray-500 mt-2 leading-relaxed">Upload pieces to initialize. Progress: <span className="font-bold text-[#26A69A]">{items.length}/2</span></p>
+
+              <div className={`flex items-center p-3 rounded-2xl transition-all ${items.length > 1 ? 'bg-teal-50 border border-teal-100' : 'bg-gray-50 border border-dashed border-gray-200'}`}>
+                 <div className={`w-8 h-8 rounded-xl flex items-center justify-center mr-4 ${items.length > 1 ? 'bg-[#26A69A] text-white' : 'bg-white text-gray-300'}`}>
+                    <Layers className="w-4 h-4" />
+                 </div>
+                 <div className="flex-1">
+                    <h4 className={`text-xs font-bold ${items.length > 1 ? 'text-gray-900' : 'text-gray-400'}`}>
+                       {items.length > 1 ? 'Archive Ready' : 'Upload Second Piece'}
+                    </h4>
+                    <p className="text-[9px] text-gray-400 uppercase tracking-wide mt-0.5">Complementary Item</p>
+                 </div>
+                 {items.length > 1 && <CheckCircle2 className="w-4 h-4 text-[#26A69A]" />}
               </div>
            </div>
-           <div className="flex items-start space-x-6 group">
-              <div className="w-12 h-12 bg-white border border-gray-100 text-gray-100 rounded-[18px] flex flex-shrink-0 items-center justify-center shadow-sm z-10 transition-transform group-hover:scale-110">
-                 <Globe className="w-5 h-5" />
-              </div>
-              <div className="pt-1">
-                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Step 02</p>
-                <h4 className="text-sm font-black text-gray-900 uppercase">VR Simulation</h4>
-                <p className="text-xs text-gray-500 mt-2 leading-relaxed">Our AI will simulate a hyper-realistic reality for your selection.</p>
-              </div>
+        </div>
+
+        {/* Feature Tease */}
+        <div className="grid grid-cols-2 gap-3 mb-auto">
+           <div className="bg-gray-50 p-4 rounded-[24px] border border-gray-100 flex flex-col items-center text-center space-y-2">
+              <Wand2 className="w-5 h-5 text-amber-500" />
+              <p className="text-[9px] font-bold text-gray-900 leading-tight">AI Outfit<br/>Generation</p>
+           </div>
+           <div className="bg-gray-50 p-4 rounded-[24px] border border-gray-100 flex flex-col items-center text-center space-y-2">
+              <Globe className="w-5 h-5 text-indigo-500" />
+              <p className="text-[9px] font-bold text-gray-900 leading-tight">Virtual<br/>Try-On</p>
            </div>
         </div>
-        <button onClick={onAddClick} className="w-full py-6 bg-[#26A69A] text-white font-black uppercase tracking-[3px] text-[11px] rounded-[32px] shadow-2xl active:scale-95 flex items-center justify-center space-x-4 group mt-auto">
-          <span>Begin Digitization</span>
-          <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+
+        <button 
+          onClick={onAddClick} 
+          className="w-full py-6 bg-zinc-900 text-white font-black uppercase tracking-[3px] text-[11px] rounded-[32px] shadow-2xl active:scale-95 flex items-center justify-center space-x-3 group transition-all hover:bg-[#26A69A]"
+        >
+          <Camera className="w-4 h-4" />
+          <span>Launch Camera Protocol</span>
         </button>
       </div>
     );
