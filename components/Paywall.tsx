@@ -3,6 +3,7 @@ import { Sparkles, Crown, X, Star, Calendar, Infinity, Loader2, ShieldCheck, Ale
 import { t } from '../services/i18n';
 import { fetchCurrentOfferings, executePurchase, restorePurchases } from '../services/purchaseService';
 import { PurchasesPackage, CustomerInfo, PACKAGE_TYPE } from '@revenuecat/purchases-capacitor';
+import { Capacitor } from '@capacitor/core';
 
 interface PaywallProps {
   isOpen: boolean;
@@ -19,7 +20,6 @@ const Paywall: React.FC<PaywallProps> = ({ isOpen, onClose, onPurchaseSuccess, l
   const [isPurchasing, setIsPurchasing] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // 1. Fetch Packages from RevenueCat
   useEffect(() => {
     const loadOfferings = async () => {
       if (!isOpen) return;
@@ -45,7 +45,7 @@ const Paywall: React.FC<PaywallProps> = ({ isOpen, onClose, onPurchaseSuccess, l
     loadOfferings();
   }, [isOpen]);
 
-  // 2. Handle Purchase Logic
+  
   const handlePurchase = async () => {
     if (!selectedPackage) return;
     
@@ -87,7 +87,6 @@ const Paywall: React.FC<PaywallProps> = ({ isOpen, onClose, onPurchaseSuccess, l
     }
   };
 
-  // 3. Handle Restore
   const handleRestore = async () => {
     setIsPurchasing(true);
     setErrorMsg(null);
@@ -107,6 +106,17 @@ const Paywall: React.FC<PaywallProps> = ({ isOpen, onClose, onPurchaseSuccess, l
       setErrorMsg("Failed to restore purchases.");
     } finally {
       setIsPurchasing(false);
+    }
+  };
+  
+  const handleOpenLegal = () => {
+    const url = process.env.POLICY_URL;
+    
+    if (Capacitor.isNativePlatform()) {
+      // Use system browser for native apps
+      window.open(url, '_system');
+    } else {
+      window.open(url, '_blank');
     }
   };
   
@@ -268,7 +278,10 @@ const Paywall: React.FC<PaywallProps> = ({ isOpen, onClose, onPurchaseSuccess, l
                 >
                   {t('restore_purchase', lang)}
                 </button>
-                <button className="text-[8px] text-zinc-600 font-black uppercase tracking-widest hover:text-white transition-colors">
+                <button
+                  onClick={handleOpenLegal} 
+                  className="text-[8px] text-zinc-600 font-black uppercase tracking-widest hover:text-white transition-colors"
+                >
                   {t('terms', lang)}
                 </button>
              </div>

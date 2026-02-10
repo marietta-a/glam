@@ -423,7 +423,7 @@ export const analyzeUpload = async (base64Image: string, lang: string = 'en'): P
   
 
   const response = await ai.models.generateContent({
-    model: 'gemini-2.5-flash-lite',
+    model: 'gemini-3-flash-preview',
     contents: { 
       parts: [
         { inlineData: { data, mimeType } }, 

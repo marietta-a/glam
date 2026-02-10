@@ -13,7 +13,7 @@ export const SUBSCRIPTION_PACK: SubscriptionPack[] = [
         name: 'Yearly Membership', 
         abr: 'yearly',
         sortOrder: 0,
-        price: 549.99, 
+        price: 339.99, 
         credits: 120000, 
         description: 'Remove Daily Limits + No Ads',
         icon: <Crown className="w-5 h-5" />,

@@ -129,7 +129,7 @@ const OnboardingView: React.FC<OnboardingViewProps> = ({ onFinish }) => {
             className="group w-full py-5 bg-white text-zinc-900 rounded-[32px] font-black uppercase tracking-[3px] text-[11px] flex items-center justify-center space-x-3 active:scale-95 transition-all shadow-[0_0_40px_-10px_rgba(255,255,255,0.3)] hover:shadow-[0_0_60px_-10px_rgba(38,166,154,0.4)]"
           >
             <Sparkles className="w-4 h-4 text-[#26A69A]" />
-            <span>Enter Boutique</span>
+            <span>Dive into Wardrobe</span>
             <ArrowRight className="w-4 h-4 opacity-0 group-hover:opacity-100 -ml-4 group-hover:ml-0 transition-all" />
           </button>
         </div>
